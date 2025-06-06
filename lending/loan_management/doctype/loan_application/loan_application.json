@@ -31,6 +31,27 @@
   "repayment_periods",
   "repayment_amount",
   "total_payable_interest",
+  "educational_details_section",
+  "university_name",
+  "university_country",
+  "course",
+  "course_type",
+  "program",
+  "column_break_12",
+  "gre_score",
+  "toefl_score",
+  "ielts_score",
+  "gmat_score",
+  "pte_score",
+  "column_break_13",
+  "tenth_score",
+  "twelveth_score",
+  "ug_college",
+  "gpa_base",
+  "gpa",
+  "graduation_year",
+  "backlogs",
+  "currently_employed",
   "amended_from"
  ],
  "fields": [
@@ -210,6 +231,111 @@
    "fieldtype": "Check",
    "label": "Is Term Loan",
    "read_only": 1
+  },
+  {
+   "fieldname": "educational_details_section",
+   "fieldtype": "Section Break",
+   "label": "Educational Details"
+  },
+  {
+   "fieldname": "university_name",
+   "fieldtype": "Data",
+   "label": "University Name"
+  },
+  {
+   "fieldname": "university_country",
+   "fieldtype": "Data",
+   "label": "University Country"
+  },
+  {
+   "fieldname": "course",
+   "fieldtype": "Data",
+   "label": "Course"
+  },
+  {
+   "fieldname": "course_type",
+   "fieldtype": "Select",
+   "label": "Course Type",
+   "options": "Full Time\nPart Time\nOnline"
+  },
+  {
+   "fieldname": "program",
+   "fieldtype": "Data",
+   "label": "Program"
+  },
+  {
+   "fieldname": "column_break_12",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "gre_score",
+   "fieldtype": "Float",
+   "label": "GRE Score"
+  },
+  {
+   "fieldname": "toefl_score",
+   "fieldtype": "Float",
+   "label": "TOEFL Score"
+  },
+  {
+   "fieldname": "ielts_score",
+   "fieldtype": "Float",
+   "label": "IELTS Score"
+  },
+  {
+   "fieldname": "gmat_score",
+   "fieldtype": "Float",
+   "label": "GMAT Score"
+  },
+  {
+   "fieldname": "pte_score",
+   "fieldtype": "Float",
+   "label": "PTE Score"
+  },
+  {
+   "fieldname": "column_break_13",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "tenth_score",
+   "fieldtype": "Float",
+   "label": "10th Score (%)"
+  },
+  {
+   "fieldname": "twelveth_score",
+   "fieldtype": "Float",
+   "label": "12th Score (%)"
+  },
+  {
+   "fieldname": "ug_college",
+   "fieldtype": "Data",
+   "label": "UG College"
+  },
+  {
+   "fieldname": "gpa_base",
+   "fieldtype": "Float",
+   "label": "GPA Base",
+   "default": "4.0"
+  },
+  {
+   "fieldname": "gpa",
+   "fieldtype": "Float",
+   "label": "GPA"
+  },
+  {
+   "fieldname": "graduation_year",
+   "fieldtype": "Int",
+   "label": "Graduation Year"
+  },
+  {
+   "fieldname": "backlogs",
+   "fieldtype": "Int",
+   "label": "Number of Backlogs"
+  },
+  {
+   "fieldname": "currently_employed",
+   "fieldtype": "Check",
+   "label": "Currently Employed"
   }
  ],
  "index_web_pages_for_search": 1,

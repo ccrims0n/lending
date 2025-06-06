@@ -60,6 +60,7 @@ class LoanApplication(Document):
 		self.set_pledge_amount()
 		self.set_loan_amount()
 		self.validate_loan_amount()
+		self.validate_scores()
 
 		if self.is_term_loan:
 			self.validate_repayment_method()
@@ -69,6 +70,19 @@ class LoanApplication(Document):
 		self.get_repayment_details()
 		self.check_sanctioned_amount_limit()
 
+	def validate_scores(self):
+		"""Validate all test scores and academic scores"""
+		# Test Scores Validation
+		if self.gre_score:
+			if not (0 <= self.gre_score <= 340):
+				frappe.throw(_("GRE Score must be between 0 and 340"))
+
+		if self.toefl_score:
+			if not (0 <= self.toefl_score <= 120):
+				frappe.throw(_("TOEFL Score must be between 0 and 120"))
+
+		if self.ielts_score:
+			if not (0 <= self.ielts_score <= 9):
 	def validate_repayment_method(self):
 		if self.repayment_method == "Repay Over Number of Periods" and not self.repayment_periods:
 			frappe.throw(_("Please enter Repayment Periods"))
