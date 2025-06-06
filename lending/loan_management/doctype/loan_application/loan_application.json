@@ -32,7 +32,8 @@
   "repayment_amount",
   "total_payable_interest",
   "educational_details_section",
-  "university",
+  "university_name",
+  "university_country",
   "course",
   "course_type",
   "program",
@@ -237,11 +238,14 @@
    "label": "Educational Details"
   },
   {
-   "fieldname": "university",
-   "fieldtype": "Link",
-   "label": "University",
-   "options": "University",
-   "reqd": 1
+   "fieldname": "university_name",
+   "fieldtype": "Data",
+   "label": "University Name"
+  },
+  {
+   "fieldname": "university_country",
+   "fieldtype": "Data",
+   "label": "University Country"
   },
   {
    "fieldname": "course",
