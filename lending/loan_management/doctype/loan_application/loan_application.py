@@ -32,6 +32,7 @@ class LoanApplication(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
+		from lending.loan_management.doctype.co_applicant.co_applicant import CoApplicant
 		from lending.loan_management.doctype.proposed_pledge.proposed_pledge import ProposedPledge
 
 		amended_from: DF.Link | None
@@ -39,7 +40,10 @@ class LoanApplication(Document):
 		applicant_name: DF.Data | None
 		applicant_type: DF.Literal["Employee", "Member", "Customer"]
 		backlogs: DF.Int
+		co_applicants: DF.Table[CoApplicant]
 		company: DF.Link
+		course: DF.Data
+		course_type: DF.Literal["", "Full Time", "Part Time", "Online"]
 		currently_employed: DF.Check
 		description: DF.SmallText | None
 		gmat_score: DF.Float
@@ -53,6 +57,7 @@ class LoanApplication(Document):
 		loan_amount: DF.Currency
 		loan_product: DF.Link
 		maximum_loan_amount: DF.Currency
+		program: DF.Data
 		pte_score: DF.Float
 		proposed_pledges: DF.Table[ProposedPledge]
 		rate_of_interest: DF.Percent
@@ -66,6 +71,8 @@ class LoanApplication(Document):
 		total_payable_interest: DF.Currency
 		twelveth_score: DF.Float
 		ug_college: DF.Data
+		university_name: DF.Data
+		university_country: DF.Data
 	# end: auto-generated types
 
 	def validate(self):
@@ -73,6 +80,7 @@ class LoanApplication(Document):
 		self.set_loan_amount()
 		self.validate_loan_amount()
 		self.validate_scores()
+		self.validate_co_applicants()
 
 		if self.is_term_loan:
 			self.validate_repayment_method()
@@ -81,6 +89,29 @@ class LoanApplication(Document):
 
 		self.get_repayment_details()
 		self.check_sanctioned_amount_limit()
+
+	def validate_co_applicants(self):
+		"""Validate co-applicants to ensure they are unique to this loan application"""
+		if not self.co_applicants:
+			return
+
+		# Check for duplicate PAN numbers within the same loan application
+		pan_numbers = [co_app.pan_number for co_app in self.co_applicants]
+		if len(pan_numbers) != len(set(pan_numbers)):
+			frappe.throw(_("Duplicate PAN numbers found in co-applicants"))
+
+		# Check if any co-applicant's PAN is already used in another loan application
+		for co_app in self.co_applicants:
+			existing_loan = frappe.db.sql("""
+				SELECT parent 
+				FROM `tabCo Applicant` 
+				WHERE pan_number = %s 
+				AND parent != %s 
+				AND parenttype = 'Loan Application'
+			""", (co_app.pan_number, self.name))
+			
+			if existing_loan:
+				frappe.throw(_("Co-Applicant with PAN {0} is already associated with another loan application").format(co_app.pan_number))
 
 	def validate_scores(self):
 		"""Validate all test scores and academic scores"""

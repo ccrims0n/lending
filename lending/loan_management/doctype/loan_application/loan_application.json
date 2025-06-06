@@ -52,6 +52,8 @@
   "graduation_year",
   "backlogs",
   "currently_employed",
+  "section_break_co_applicants",
+  "co_applicants",
   "amended_from"
  ],
  "fields": [
@@ -336,6 +338,17 @@
    "fieldname": "currently_employed",
    "fieldtype": "Check",
    "label": "Currently Employed"
+  },
+  {
+   "fieldname": "section_break_co_applicants",
+   "fieldtype": "Section Break",
+   "label": "Co-Applicants"
+  },
+  {
+   "fieldname": "co_applicants",
+   "fieldtype": "Table",
+   "label": "Co-Applicants",
+   "options": "Co Applicant"
   }
  ],
  "index_web_pages_for_search": 1,

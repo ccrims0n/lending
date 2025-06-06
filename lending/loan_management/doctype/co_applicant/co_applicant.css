@@ -1,0 +1,27 @@
+/* Copyright (c) 2024, Frappe Technologies Pvt. Ltd. and contributors
+   For license information, please see license.txt */
+
+/* Add any custom styling for the Co-Applicant form here */
+.co-applicant-form {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+/* Style for required fields */
+.reqd {
+    color: #e74c3c;
+}
+
+/* Style for error messages */
+.error-message {
+    color: #e74c3c;
+    font-size: 0.9em;
+    margin-top: 5px;
+}
+
+/* Style for success messages */
+.success-message {
+    color: #2ecc71;
+    font-size: 0.9em;
+    margin-top: 5px;
+} 

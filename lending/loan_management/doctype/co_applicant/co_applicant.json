@@ -1,0 +1,98 @@
+{
+	"actions": [],
+	"allow_rename": 1,
+	"creation": "2024-03-19 10:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"co_applicant_name",
+		"date_of_birth",
+		"pan_number",
+		"email",
+		"contact_number",
+		"relationship_with_applicant",
+		"address",
+		"city",
+		"state",
+		"country",
+		"pincode"
+	],
+	"fields": [
+		{
+			"fieldname": "co_applicant_name",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"label": "Co-Applicant Name",
+			"reqd": 1
+		},
+		{
+			"fieldname": "date_of_birth",
+			"fieldtype": "Date",
+			"label": "Date of Birth",
+			"reqd": 1
+		},
+		{
+			"fieldname": "pan_number",
+			"fieldtype": "Data",
+			"label": "PAN Number",
+			"reqd": 1
+		},
+		{
+			"fieldname": "email",
+			"fieldtype": "Email",
+			"label": "Email",
+			"reqd": 1
+		},
+		{
+			"fieldname": "contact_number",
+			"fieldtype": "Phone",
+			"label": "Contact Number",
+			"reqd": 1
+		},
+		{
+			"fieldname": "relationship_with_applicant",
+			"fieldtype": "Select",
+			"label": "Relationship with Applicant",
+			"options": "Spouse\nParent\nSibling\nOther",
+			"reqd": 1
+		},
+		{
+			"fieldname": "address",
+			"fieldtype": "Text Editor",
+			"label": "Address"
+		},
+		{
+			"fieldname": "city",
+			"fieldtype": "Data",
+			"label": "City"
+		},
+		{
+			"fieldname": "state",
+			"fieldtype": "Data",
+			"label": "State"
+		},
+		{
+			"fieldname": "country",
+			"fieldtype": "Link",
+			"label": "Country",
+			"options": "Country"
+		},
+		{
+			"fieldname": "pincode",
+			"fieldtype": "Data",
+			"label": "PIN Code"
+		}
+	],
+	"index_web_pages_for_search": 1,
+	"istable": 1,
+	"links": [],
+	"modified": "2024-03-19 10:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Loan Management",
+	"name": "Co Applicant",
+	"owner": "Administrator",
+	"permissions": [],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": []
+} 
