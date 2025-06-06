@@ -40,6 +40,8 @@ class LoanApplication(Document):
 		applicant_type: DF.Literal["Employee", "Member", "Customer"]
 		backlogs: DF.Int
 		company: DF.Link
+		course: DF.Data
+		course_type: DF.Literal["", "Full Time", "Part Time", "Online"]
 		currently_employed: DF.Check
 		description: DF.SmallText | None
 		gmat_score: DF.Float
@@ -53,6 +55,7 @@ class LoanApplication(Document):
 		loan_amount: DF.Currency
 		loan_product: DF.Link
 		maximum_loan_amount: DF.Currency
+		program: DF.Data
 		pte_score: DF.Float
 		proposed_pledges: DF.Table[ProposedPledge]
 		rate_of_interest: DF.Percent
@@ -66,6 +69,7 @@ class LoanApplication(Document):
 		total_payable_interest: DF.Currency
 		twelveth_score: DF.Float
 		ug_college: DF.Data
+		university: DF.Link
 	# end: auto-generated types
 
 	def validate(self):
