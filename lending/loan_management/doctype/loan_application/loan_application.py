@@ -38,22 +38,34 @@ class LoanApplication(Document):
 		applicant: DF.DynamicLink
 		applicant_name: DF.Data | None
 		applicant_type: DF.Literal["Employee", "Member", "Customer"]
+		backlogs: DF.Int
 		company: DF.Link
+		currently_employed: DF.Check
 		description: DF.SmallText | None
+		gmat_score: DF.Float
+		gpa: DF.Float
+		gpa_base: DF.Float
+		graduation_year: DF.Int
+		gre_score: DF.Float
+		ielts_score: DF.Float
 		is_secured_loan: DF.Check
 		is_term_loan: DF.Check
 		loan_amount: DF.Currency
 		loan_product: DF.Link
 		maximum_loan_amount: DF.Currency
-		posting_date: DF.Date | None
+		pte_score: DF.Float
 		proposed_pledges: DF.Table[ProposedPledge]
 		rate_of_interest: DF.Percent
 		repayment_amount: DF.Currency
 		repayment_method: DF.Literal["", "Repay Fixed Amount per Period", "Repay Over Number of Periods"]
 		repayment_periods: DF.Int
 		status: DF.Literal["Open", "Approved", "Rejected"]
+		tenth_score: DF.Float
+		toefl_score: DF.Float
 		total_payable_amount: DF.Currency
 		total_payable_interest: DF.Currency
+		twelveth_score: DF.Float
+		ug_college: DF.Data
 	# end: auto-generated types
 
 	def validate(self):
@@ -83,6 +95,42 @@ class LoanApplication(Document):
 
 		if self.ielts_score:
 			if not (0 <= self.ielts_score <= 9):
+				frappe.throw(_("IELTS Score must be between 0 and 9"))
+
+		if self.gmat_score:
+			if not (0 <= self.gmat_score <= 800):
+				frappe.throw(_("GMAT Score must be between 0 and 800"))
+
+		if self.pte_score:
+			if not (0 <= self.pte_score <= 90):
+				frappe.throw(_("PTE Score must be between 0 and 90"))
+
+		# Academic Scores Validation
+		if self.tenth_score:
+			if not (0 <= self.tenth_score <= 100):
+				frappe.throw(_("10th Score must be between 0 and 100"))
+
+		if self.twelveth_score:
+			if not (0 <= self.twelveth_score <= 100):
+				frappe.throw(_("12th Score must be between 0 and 100"))
+
+		# GPA Validation
+		if self.gpa:
+			if not self.gpa_base:
+				frappe.throw(_("Please specify GPA Base"))
+			if not (0 <= self.gpa <= self.gpa_base):
+				frappe.throw(_("GPA must be between 0 and {0}").format(self.gpa_base))
+
+		# Graduation Year Validation
+		if self.graduation_year:
+			current_year = frappe.utils.getdate().year
+			if not (1900 <= self.graduation_year <= current_year + 5):
+				frappe.throw(_("Graduation Year must be between 1900 and {0}").format(current_year + 5))
+
+		# Backlogs Validation
+		if self.backlogs is not None and self.backlogs < 0:
+			frappe.throw(_("Number of Backlogs cannot be negative"))
+
 	def validate_repayment_method(self):
 		if self.repayment_method == "Repay Over Number of Periods" and not self.repayment_periods:
 			frappe.throw(_("Please enter Repayment Periods"))
