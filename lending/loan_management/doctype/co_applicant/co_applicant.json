@@ -40,7 +40,7 @@
         {
             "fieldname": "email",
             "fieldtype": "Email",
-            "label": "Email",
+            "label": "Email"
         },
         {
             "fieldname": "contact_number",

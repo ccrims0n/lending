@@ -13,6 +13,7 @@
   "company",
   "posting_date",
   "status",
+  "workflow_state",
   "section_break_4",
   "loan_product",
   "is_term_loan",
@@ -54,6 +55,13 @@
   "currently_employed",
   "section_break_co_applicants",
   "co_applicants",
+  "section_break_documents",
+  "aadhar_number",
+  "aadhar_file",
+  "pan_number",
+  "pan_file",
+  "passport_number",
+  "passport_file",
   "amended_from"
  ],
  "fields": [
@@ -349,6 +357,63 @@
    "fieldtype": "Table",
    "label": "Co-Applicants",
    "options": "Co Applicant"
+  },
+  {
+   "fieldname": "workflow_state",
+   "fieldtype": "Select",
+   "label": "Workflow State",
+   "options": "Draft\nDocument Draft\nPending Approval\nApproved\nRejected",
+   "default": "Draft",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_documents",
+   "fieldtype": "Section Break",
+   "label": "Documents",
+   "depends_on": "workflow_state",
+   "depends_on_value": "Document Draft"
+  },
+  {
+   "fieldname": "aadhar_number",
+   "fieldtype": "Data",
+   "label": "Aadhar Number",
+   "depends_on": "workflow_state",
+   "depends_on_value": "Document Draft"
+  },
+  {
+   "fieldname": "aadhar_file",
+   "fieldtype": "Attach",
+   "label": "Aadhar Card",
+   "depends_on": "workflow_state",
+   "depends_on_value": "Document Draft"
+  },
+  {
+   "fieldname": "pan_number",
+   "fieldtype": "Data",
+   "label": "PAN Number",
+   "depends_on": "workflow_state",
+   "depends_on_value": "Document Draft"
+  },
+  {
+   "fieldname": "pan_file",
+   "fieldtype": "Attach",
+   "label": "PAN Card",
+   "depends_on": "workflow_state",
+   "depends_on_value": "Document Draft"
+  },
+  {
+   "fieldname": "passport_number",
+   "fieldtype": "Data",
+   "label": "Passport Number",
+   "depends_on": "workflow_state",
+   "depends_on_value": "Document Draft"
+  },
+  {
+   "fieldname": "passport_file",
+   "fieldtype": "Attach",
+   "label": "Passport",
+   "depends_on": "workflow_state",
+   "depends_on_value": "Document Draft"
   }
  ],
  "index_web_pages_for_search": 1,

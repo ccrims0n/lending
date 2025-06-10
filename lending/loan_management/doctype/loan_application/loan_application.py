@@ -35,6 +35,8 @@ class LoanApplication(Document):
 		from lending.loan_management.doctype.co_applicant.co_applicant import CoApplicant
 		from lending.loan_management.doctype.proposed_pledge.proposed_pledge import ProposedPledge
 
+		aadhar_file: DF.Attach | None
+		aadhar_number: DF.Data | None
 		amended_from: DF.Link | None
 		applicant: DF.DynamicLink
 		applicant_name: DF.Data | None
@@ -57,6 +59,10 @@ class LoanApplication(Document):
 		loan_amount: DF.Currency
 		loan_product: DF.Link
 		maximum_loan_amount: DF.Currency
+		pan_file: DF.Attach | None
+		pan_number: DF.Data | None
+		passport_file: DF.Attach | None
+		passport_number: DF.Data | None
 		program: DF.Data
 		pte_score: DF.Float
 		proposed_pledges: DF.Table[ProposedPledge]
@@ -73,6 +79,7 @@ class LoanApplication(Document):
 		ug_college: DF.Data
 		university_name: DF.Data
 		university_country: DF.Data
+		workflow_state: DF.Literal["Draft", "Document Draft", "Pending Approval", "Approved", "Rejected"]
 	# end: auto-generated types
 
 	def validate(self):
@@ -81,6 +88,7 @@ class LoanApplication(Document):
 		self.validate_loan_amount()
 		self.validate_scores()
 		self.validate_co_applicants()
+		self.validate_documents()
 
 		if self.is_term_loan:
 			self.validate_repayment_method()
@@ -285,6 +293,85 @@ class LoanApplication(Document):
 
 		if not self.loan_amount and self.is_secured_loan and self.proposed_pledges:
 			self.loan_amount = self.maximum_loan_amount
+
+	def validate_documents(self):
+		"""Validate document numbers and files"""
+		if self.workflow_state != "Document Draft":
+			return
+
+		# Validate Aadhar Number (12 digits)
+		if self.aadhar_number:
+			if not self.aadhar_number.isdigit() or len(self.aadhar_number) != 12:
+				frappe.throw(_("Aadhar Number must be 12 digits"))
+
+		# Validate PAN Number (ABCDE1234F format)
+		if self.pan_number:
+			import re
+			pan_pattern = r'^[A-Z]{5}[0-9]{4}[A-Z]{1}$'
+			if not re.match(pan_pattern, self.pan_number.upper()):
+				frappe.throw(_("Invalid PAN Number format. It should be in the format: ABCDE1234F"))
+
+		# Validate Passport Number (alphanumeric, 6-9 characters)
+		if self.passport_number:
+			if not self.passport_number.isalnum() or not (6 <= len(self.passport_number) <= 9):
+				frappe.throw(_("Passport Number must be 6-9 alphanumeric characters"))
+
+	def has_permission(self, ptype, user=None):
+		"""Check if user has permission to access the document"""
+		if not user:
+			user = frappe.session.user
+
+		# If user is the owner or has Loan Manager role, allow access
+		if user == self.owner or "Loan Manager" in frappe.get_roles(user):
+			return True
+
+		# For document access, check if user is assigned to this loan application
+		if ptype == "read" and self.workflow_state == "Document Draft":
+			assigned_users = frappe.get_all(
+				"Loan Application Assignment",
+				filters={"loan_application": self.name},
+				fields=["user"]
+			)
+			return user in [d.user for d in assigned_users]
+
+		return False
+
+	def on_update(self):
+		"""Handle document file permissions"""
+		if self.workflow_state == "Document Draft":
+			self.setup_document_permissions()
+
+	def setup_document_permissions(self):
+		"""Set up permissions for document files"""
+		files = [self.aadhar_file, self.pan_file, self.passport_file]
+		for file in files:
+			if file:
+				# Get the File document
+				file_doc = frappe.get_doc("File", {"file_url": file})
+				
+				# Set private file
+				file_doc.is_private = 1
+				
+				# Link file to Loan Application
+				file_doc.attached_to_doctype = "Loan Application"
+				file_doc.attached_to_name = self.name
+				file_doc.save()
+
+				# Add permissions for assigned users
+				assigned_users = frappe.get_all(
+					"Loan Application Assignment",
+					filters={"loan_application": self.name},
+					fields=["user"]
+				)
+				for user in assigned_users:
+					frappe.share.add(
+						"File",
+						file_doc.name,
+						user.user,
+						read=1,
+						write=0,
+						share=0
+					)
 
 
 @frappe.whitelist()
