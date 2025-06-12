@@ -702,6 +702,27 @@
    "label": "Term Details"
   },
   {
+   "fieldname": "enable_special_emi",
+   "fieldtype": "Check",
+   "label": "Enable Special EMI Period",
+   "depends_on": "eval: doc.is_term_loan && doc.repayment_schedule_type != \"Line of Credit\""
+  },
+  {
+   "fieldname": "special_emi_period",
+   "fieldtype": "Int",
+   "label": "Special EMI Period (Months)",
+   "depends_on": "enable_special_emi",
+   "description": "Number of months for which special EMI will be applicable"
+  },
+  {
+   "fieldname": "special_emi_amount",
+   "fieldtype": "Currency",
+   "label": "Special EMI Amount",
+   "depends_on": "enable_special_emi",
+   "options": "Company:company:default_currency",
+   "description": "Fixed EMI amount for the special period"
+  },
+  {
    "fieldname": "column_break_qsfx",
    "fieldtype": "Column Break"
   }

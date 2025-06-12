@@ -352,6 +352,13 @@ class LoanRepaymentSchedule(Document):
 		carry_forward_interest = self.adjusted_interest
 		moratorium_interest = 0
 		row = 0
+
+		# Get special EMI details from loan
+		loan_doc = frappe.get_doc("Loan", self.loan)
+		special_emi_enabled = loan_doc.get("enable_special_emi")
+		special_emi_period = loan_doc.get("special_emi_period")
+		special_emi_amount = loan_doc.get("special_emi_amount")
+
 		if not self.restructure_type and self.repayment_method != "Repay Fixed Amount per Period":
 			monthly_repayment_amount = get_monthly_repayment_amount(
 				balance_amount, rate_of_interest, self.repayment_periods, self.repayment_frequency
@@ -382,6 +389,7 @@ class LoanRepaymentSchedule(Document):
 		if additional_days < 0:
 			self.broken_period_interest_days = 0
 
+		special_emi_count = 0
 		while balance_amount > 0:
 			if self.moratorium_tenure and self.repayment_frequency == "Monthly":
 				if getdate(payment_date) > getdate(self.moratorium_end_date):
@@ -408,6 +416,12 @@ class LoanRepaymentSchedule(Document):
 				interest_share_percentage,
 			)
 
+			# Handle special EMI period
+			current_emi_amount = monthly_repayment_amount
+			if special_emi_enabled and special_emi_count < special_emi_period:
+				current_emi_amount = special_emi_amount
+				special_emi_count += 1
+
 			(
 				interest_amount,
 				principal_amount,
@@ -420,7 +434,7 @@ class LoanRepaymentSchedule(Document):
 				rate_of_interest,
 				payment_days,
 				months,
-				monthly_repayment_amount,
+				current_emi_amount,
 				carry_forward_interest,
 				previous_interest_amount,
 				additional_principal_amount,

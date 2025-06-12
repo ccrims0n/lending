@@ -137,9 +137,31 @@ class Loan(AccountsController):
 		self.set_default_charge_account()
 		self.set_available_limit_amount()
 		self.validate_repayment_terms()
+		self.validate_special_emi()
 
 		if not self.is_term_loan or (self.is_term_loan and not self.is_new()):
 			self.calculate_totals()
+
+	def validate_special_emi(self):
+		"""Validate special EMI configuration"""
+		if not self.enable_special_emi:
+			return
+
+		if not self.special_emi_period:
+			frappe.throw(_("Please enter Special EMI Period"))
+
+		if not self.special_emi_amount:
+			frappe.throw(_("Please enter Special EMI Amount"))
+
+		if self.special_emi_period >= self.repayment_periods:
+			frappe.throw(_("Special EMI Period cannot be greater than or equal to total Repayment Periods"))
+
+		# Calculate minimum EMI based on interest
+		monthly_interest_rate = flt(self.rate_of_interest) / (12 * 100)
+		min_emi = self.loan_amount * monthly_interest_rate
+
+		if self.special_emi_amount <= min_emi:
+			frappe.throw(_("Special EMI Amount must be greater than minimum EMI amount of {0}").format(min_emi))
 
 	def onload(self):
 		if self.docstatus == 1:
