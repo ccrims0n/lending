@@ -144,18 +144,18 @@ class Loan(AccountsController):
 
 	def validate_special_emi(self):
 		"""Validate special EMI configuration"""
-        if not self.is_term_loan or not self.enable_special_emi or self.repayment_frequency == "One Time":
-            return
+		if not self.is_term_loan or not self.enable_special_emi or self.repayment_frequency == "One Time":
+			return
 
-        if not self.special_emi_period:
-            frappe.throw(_("Please enter Special EMI Period"))
+		if not self.special_emi_period:
+			frappe.throw(_("Please enter Special EMI Period"))
 
-        if not self.special_emi_amount:
-            frappe.throw(_("Please enter Special EMI Amount"))
+		if not self.special_emi_amount:
+			frappe.throw(_("Please enter Special EMI Amount"))
 
-        if self.repayment_schedule_type == "Repay Over Number of Periods":
-            if self.special_emi_period >= self.repayment_periods:
-                frappe.throw(_("Special EMI Period cannot be greater than or equal to total Repayment Periods"))
+		if self.repayment_schedule_type == "Repay Over Number of Periods":
+			if self.special_emi_period >= self.repayment_periods:
+				frappe.throw(_("Special EMI Period cannot be greater than or equal to total Repayment Periods"))
 
 	def onload(self):
 		if self.docstatus == 1:
