@@ -348,59 +348,31 @@ class LoanRepaymentSchedule(Document):
 		interest_share_percentage,
 		partner_schedule_type=None,
 	):
+		loan = frappe.get_doc("Loan", self.loan)
 		payment_date = self.repayment_start_date
-		carry_forward_interest = self.adjusted_interest
-		moratorium_interest = 0
-		row = 0
-		if not self.restructure_type and self.repayment_method != "Repay Fixed Amount per Period":
-			monthly_repayment_amount = get_monthly_repayment_amount(
-				balance_amount, rate_of_interest, self.repayment_periods, self.repayment_frequency
-			)
-		else:
-			monthly_repayment_amount = self.monthly_repayment_amount
+		balance_amount = flt(balance_amount)
+		rate_of_interest = flt(rate_of_interest)
+		additional_principal_amount = flt(additional_principal_amount)
+		previous_interest_amount = flt(previous_interest_amount)
+		pending_prev_days = flt(pending_prev_days)
+		principal_share_percentage = flt(principal_share_percentage)
+		interest_share_percentage = flt(interest_share_percentage)
 
-		if not self.restructure_type:
-			if (
-				self.moratorium_tenure
-				and self.repayment_frequency == "Monthly"
-				and self.repayment_schedule_type == "Monthly as per cycle date"
-			):
-				payment_date = self.repayment_start_date
-				self.repayment_start_date = add_months(payment_date, self.moratorium_tenure)
-				self.moratorium_end_date = add_months(self.repayment_start_date, -1)
-			elif self.moratorium_tenure and self.repayment_frequency == "Monthly":
-				self.moratorium_end_date = add_months(self.repayment_start_date, self.moratorium_tenure)
-				if self.repayment_schedule_type == "Pro-rated calendar months":
-					self.moratorium_end_date = add_days(self.moratorium_end_date, -1)
+		# Calculate normal EMI amount
+		normal_emi = self.monthly_repayment_amount
+		interest_component = (balance_amount * rate_of_interest / 100) / 12
 
-		tenure = self.get_applicable_tenure(payment_date)
-		additional_days = cint(self.broken_period_interest_days)
-
-		if len(self.get(schedule_field)) > 0:
-			self.broken_period_interest_days = 0
-
-		if additional_days < 0:
-			self.broken_period_interest_days = 0
+		# Handle special EMI if enabled
+		special_emi_enabled = loan.enable_special_emi
+		special_emi_period = loan.special_emi_period if special_emi_enabled else 0
+		special_emi_amount = loan.special_emi_amount if special_emi_enabled else 0
+		current_period = 0
 
 		while balance_amount > 0:
-			if self.moratorium_tenure and self.repayment_frequency == "Monthly":
-				if getdate(payment_date) > getdate(self.moratorium_end_date):
-					if (
-						self.moratorium_type == "EMI"
-						and self.treatment_of_interest == "Capitalize"
-						and moratorium_interest
-					):
-						balance_amount = self.loan_amount + moratorium_interest
-						monthly_repayment_amount = get_monthly_repayment_amount(
-							balance_amount, rate_of_interest, self.repayment_periods, self.repayment_frequency
-						)
-						moratorium_interest = 0
-
-			prev_balance_amount = balance_amount
-
-			payment_days, months = self.get_days_and_months(
+			current_period += 1
+			days, months = self.get_days_and_months(
 				payment_date,
-				additional_days,
+				pending_prev_days,
 				balance_amount,
 				rate_of_interest,
 				schedule_field,
@@ -408,99 +380,59 @@ class LoanRepaymentSchedule(Document):
 				interest_share_percentage,
 			)
 
-			(
-				interest_amount,
-				principal_amount,
-				balance_amount,
-				total_payment,
-				days,
-				previous_interest_amount,
-			) = get_amounts(
-				balance_amount,
-				rate_of_interest,
-				payment_days,
-				months,
-				monthly_repayment_amount,
-				carry_forward_interest,
-				previous_interest_amount,
-				additional_principal_amount,
-				pending_prev_days,
+			interest_amount = flt(
+				(balance_amount * rate_of_interest * days) / (365 * 100),
+				precision=2,
 			)
 
-			if (
-				schedule_field == "colender_schedule"
-				and partner_schedule_type == "POS reduction plus interest at partner ROI"
-				and row <= len(self.get("repayment_schedule")) - 1
-			):
-				principal_amount = self.get("repayment_schedule")[row].principal_amount
-				balance_amount = prev_balance_amount - (principal_amount * principal_share_percentage / 100)
-				row = row + 1
-
-			if (
-				self.moratorium_end_date and self.moratorium_tenure and self.repayment_frequency == "Monthly"
-			):
-				if getdate(payment_date) <= getdate(self.moratorium_end_date):
-					principal_amount = 0
-					balance_amount = self.current_principal_amount
-					moratorium_interest += interest_amount
-
-					if self.moratorium_type == "EMI":
-						total_payment = 0
-						interest_amount = 0
+			# Calculate EMI amount based on whether we're in special EMI period
+			if special_emi_enabled and current_period <= special_emi_period:
+				emi_amount = special_emi_amount
+			else:
+				# For remaining periods, calculate EMI based on remaining balance
+				if self.repayment_method == "Repay Fixed Amount per Period":
+					emi_amount = normal_emi
+				else:
+					# Calculate EMI for remaining periods
+					remaining_periods = self.repayment_periods - (current_period - 1)
+					if remaining_periods > 0:
+						emi_amount = self.calculate_emi_for_remaining_periods(
+							balance_amount, rate_of_interest, remaining_periods
+						)
 					else:
-						total_payment = interest_amount
+						emi_amount = balance_amount + interest_amount
 
-				elif (
-					self.moratorium_type == "EMI"
-					and self.treatment_of_interest == "Add to first repayment"
-					and moratorium_interest
-				):
-					interest_amount += moratorium_interest
-					total_payment = principal_amount + interest_amount
-					moratorium_interest = 0
+			principal_amount = flt(emi_amount - interest_amount, precision=2)
 
+			# Ensure principal amount doesn't exceed balance
+			if principal_amount > balance_amount:
+				principal_amount = balance_amount
+				emi_amount = principal_amount + interest_amount
+
+			# Add repayment schedule row
 			self.add_repayment_schedule_row(
 				payment_date,
 				principal_amount,
 				interest_amount,
-				total_payment,
-				balance_amount,
+				emi_amount,
+				balance_amount - principal_amount,
 				days,
 				repayment_schedule_field=schedule_field,
 				principal_share_percentage=principal_share_percentage,
 				interest_share_percentage=interest_share_percentage,
 			)
 
-			# All the residue amount is added to the last row for "Repay Over Number of Periods"
-			#
-			# Also, when such a Repayment Schedule is rescheduled, its repayment_method changes to Repay Fixed Amount per Period
-			# Here, the tenure shouldn't change. Thus, if this is a restructed repayment schedule, the last row is all the residue amount left.
-			# This is a special case.
-
-			if (
-				self.repayment_method == "Repay Over Number of Periods"
-				or (self.restructure_type and self.repayment_method == "Repay Fixed Amount per Period")
-			) and len(self.get(schedule_field)) >= tenure:
-				self.get(schedule_field)[-1].principal_amount += balance_amount
-				self.get(schedule_field)[-1].balance_loan_amount = 0
-				self.get(schedule_field)[-1].total_payment = (
-					self.get(schedule_field)[-1].interest_amount + self.get(schedule_field)[-1].principal_amount
-				)
-				balance_amount = 0
-
+			balance_amount -= principal_amount
 			payment_date = self.get_next_payment_date(payment_date)
-			carry_forward_interest = 0
-			additional_days = 0
-			additional_principal_amount = 0
 			pending_prev_days = 0
 
-		if schedule_field == "repayment_schedule" and not self.restructure_type:
-			if self.repayment_frequency == "One Time":
-				self.monthly_repayment_amount = self.get(schedule_field)[0].total_payment
-			else:
-				self.monthly_repayment_amount = monthly_repayment_amount
-		else:
-			self.repayment_periods = self.number_of_rows
+	def calculate_emi_for_remaining_periods(self, balance_amount, rate_of_interest, remaining_periods):
+		"""Calculate EMI for remaining periods after special EMI period"""
+		monthly_rate = rate_of_interest / (12 * 100)
+		emi = (balance_amount * monthly_rate * (1 + monthly_rate) ** remaining_periods) / (
+			(1 + monthly_rate) ** remaining_periods - 1
+		)
+		return flt(emi, precision=2)
 
 	def get_next_payment_date(self, payment_date):
 		if (

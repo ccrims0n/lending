@@ -137,6 +137,7 @@ class Loan(AccountsController):
 		self.set_default_charge_account()
 		self.set_available_limit_amount()
 		self.validate_repayment_terms()
+		self.validate_special_emi()
 
 		if not self.is_term_loan or (self.is_term_loan and not self.is_new()):
 			self.calculate_totals()
@@ -202,6 +203,26 @@ class Loan(AccountsController):
 		if self.is_term_loan and self.repayment_schedule_type == "Repay Over Number of Periods":
 			if not self.repayment_periods:
 				frappe.throw(_("Repayment periods is mandatory for term loans"))
+
+	def validate_special_emi(self):
+		if self.enable_special_emi:
+			if not self.is_term_loan or self.repayment_schedule_type == "Line of Credit":
+				frappe.throw(_("Special EMI can only be enabled for term loans"))
+
+			if not self.special_emi_period or not self.special_emi_amount:
+				frappe.throw(_("Please enter both Special EMI Period and Amount"))
+
+			if self.special_emi_period >= self.repayment_periods:
+				frappe.throw(_("Special EMI Period must be less than total repayment periods"))
+
+			# Calculate interest component of normal EMI
+			normal_emi = self.monthly_repayment_amount
+			interest_component = (self.loan_amount * self.rate_of_interest / 100) / 12
+
+			if self.special_emi_amount <= interest_component:
+				frappe.throw(_("Special EMI Amount must be greater than interest component of normal EMI ({0})").format(
+					frappe.format_value(interest_component, "Currency", currency=self.company_currency)
+				))
 
 	def on_submit(self):
 		self.link_loan_security_assignment()

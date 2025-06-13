@@ -44,6 +44,10 @@
   "moratorium_tenure",
   "repayment_frequency",
   "treatment_of_interest",
+  "special_emi_section",
+  "enable_special_emi",
+  "special_emi_period",
+  "special_emi_amount",
   "loan_credit_limits_section",
   "limit_applicable_start",
   "maximum_limit_amount",
@@ -704,6 +708,35 @@
   {
    "fieldname": "column_break_qsfx",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "special_emi_section",
+   "fieldtype": "Section Break",
+   "label": "Special EMI Details"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval: doc.is_term_loan && doc.repayment_schedule_type != \"Line of Credit\"",
+   "fieldname": "enable_special_emi",
+   "fieldtype": "Check",
+   "label": "Enable Special EMI"
+  },
+  {
+   "depends_on": "enable_special_emi",
+   "fieldname": "special_emi_period",
+   "fieldtype": "Int",
+   "label": "Special EMI Period",
+   "mandatory_depends_on": "enable_special_emi",
+   "description": "Period for which special EMI will be applicable. Must be less than total repayment periods."
+  },
+  {
+   "depends_on": "enable_special_emi",
+   "fieldname": "special_emi_amount",
+   "fieldtype": "Currency",
+   "label": "Special EMI Amount",
+   "mandatory_depends_on": "enable_special_emi",
+   "description": "Fixed EMI amount for the special period. Must be greater than interest component of normal EMI.",
+   "options": "Company:company:default_currency"
   }
  ],
  "index_web_pages_for_search": 1,
