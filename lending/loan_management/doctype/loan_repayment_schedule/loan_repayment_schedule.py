@@ -400,7 +400,6 @@ class LoanRepaymentSchedule(Document):
 		if additional_days < 0:
 			self.broken_period_interest_days = 0
 
-		special_emi_count = 0
 		while balance_amount > 0:
 			if self.moratorium_tenure and self.repayment_frequency == "Monthly":
 				if getdate(payment_date) > getdate(self.moratorium_end_date):
@@ -439,7 +438,7 @@ class LoanRepaymentSchedule(Document):
 				rate_of_interest,
 				payment_days,
 				months,
-				current_emi_amount,
+				monthly_repayment_amount,
 				carry_forward_interest,
 				previous_interest_amount,
 				additional_principal_amount,
@@ -906,7 +905,7 @@ class LoanRepaymentSchedule(Document):
 				rate_of_interest,
 				payment_days,
 				months,
-				current_emi_amount,
+				monthly_repayment_amount,
 				carry_forward_interest,
 				previous_interest_amount,
 				additional_principal_amount,
