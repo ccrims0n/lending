@@ -988,13 +988,15 @@ class LoanRepaymentSchedule(Document):
 			if self.repayment_frequency == "One Time":
 				self.monthly_repayment_amount = self.get(schedule_field)[0].total_payment
 			else:
-				self.monthly_repayment_amount = standard_monthly_repayment_amount
+				self.monthly_repayment_amount = get_monthly_repayment_amount(
+					balance_amount, rate_of_interest, self.repayment_periods - completed_tenure, self.repayment_frequency
+				)
 		else:
 			self.repayment_periods = self.number_of_rows
 
 		return (
 			0,
-			self.current_principal_amount,
+			balance_amount,
 			additional_principal_amount,
 			pending_prev_days,
 		)
