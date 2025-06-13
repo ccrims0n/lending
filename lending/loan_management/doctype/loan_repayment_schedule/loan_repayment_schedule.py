@@ -820,7 +820,12 @@ class LoanRepaymentSchedule(Document):
 		special_emi_amount = loan_doc.get("special_emi_amount")
 
 		if not special_emi_enabled:
-			return
+			return (
+				previous_interest_amount,
+				balance_amount,
+				additional_principal_amount,
+				pending_prev_days,
+			)
 
 		payment_date = self.repayment_start_date
 		carry_forward_interest = self.adjusted_interest
