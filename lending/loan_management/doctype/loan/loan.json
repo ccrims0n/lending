@@ -39,6 +39,9 @@
   "repayment_method",
   "repayment_periods",
   "monthly_repayment_amount",
+  "enable_special_emi",
+  "special_emi_amount",
+  "special_emi_period",
   "column_break_qsfx",
   "moratorium_type",
   "moratorium_tenure",
@@ -705,14 +708,14 @@
    "fieldname": "enable_special_emi",
    "fieldtype": "Check",
    "label": "Enable Special EMI Period",
-   "depends_on": "eval: doc.is_term_loan && doc.repayment_schedule_type != \"Line of Credit\""
+   "depends_on": "eval: doc.is_term_loan && doc.repayment_schedule_type != \"Line of Credit\" && doc.repayment_frequency != \"One Time\""
   },
   {
    "fieldname": "special_emi_period",
    "fieldtype": "Int",
-   "label": "Special EMI Period (Months)",
+   "label": "Special EMI Period",
    "depends_on": "enable_special_emi",
-   "description": "Number of months for which special EMI will be applicable"
+   "description": "Period for which special EMI will be applicable"
   },
   {
    "fieldname": "special_emi_amount",
