@@ -987,6 +987,13 @@ class LoanRepaymentSchedule(Document):
 		else:
 			self.repayment_periods = self.number_of_rows
 
+		return (
+			0,
+			self.current_principal_amount,
+			additional_principal_amount,
+			pending_prev_days,
+		)
+
 	def set_repayment_start_date(self):
 		if self.repayment_schedule_type == "Pro-rated calendar months" and not self.restructure_type:
 			repayment_start_date = get_last_day(self.posting_date)
