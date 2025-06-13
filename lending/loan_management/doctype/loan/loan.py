@@ -212,11 +212,16 @@ class Loan(AccountsController):
 			if not self.special_emi_period or not self.special_emi_amount:
 				frappe.throw(_("Please enter both Special EMI Period and Amount"))
 
+			if not self.repayment_periods:
+				frappe.throw(_("Repayment periods is mandatory for term loans with special EMI"))
+
 			if self.special_emi_period >= self.repayment_periods:
 				frappe.throw(_("Special EMI Period must be less than total repayment periods"))
 
 			# Calculate interest component of normal EMI
-			normal_emi = self.monthly_repayment_amount
+			if not self.loan_amount or not self.rate_of_interest:
+				frappe.throw(_("Loan amount and rate of interest are required to validate special EMI"))
+
 			interest_component = (self.loan_amount * self.rate_of_interest / 100) / 12
 
 			if self.special_emi_amount <= interest_component:
