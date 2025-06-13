@@ -828,7 +828,7 @@ class LoanRepaymentSchedule(Document):
 		moratorium_interest = 0
 		row = 0
 
-		monthly_repayment_amount = self.special_emi_amount
+		monthly_repayment_amount = special_emi_amount
 
 		if not self.restructure_type and self.repayment_method != "Repay Fixed Amount per Period":
 			standard_monthly_repayment_amount = get_monthly_repayment_amount(
