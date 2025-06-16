@@ -39,6 +39,9 @@
   "repayment_method",
   "repayment_periods",
   "monthly_repayment_amount",
+  "enable_special_emi",
+  "special_emi_amount",
+  "special_emi_period",
   "column_break_qsfx",
   "moratorium_type",
   "moratorium_tenure",
@@ -211,7 +214,7 @@
    "fieldname": "repayment_method",
    "fieldtype": "Select",
    "label": "Repayment Method",
-   "options": "\nRepay Fixed Amount per Period\nRepay Over Number of Periods"
+   "options": "Repay Over Number of Periods"
   },
   {
    "depends_on": "eval: doc.is_term_loan && doc.repayment_schedule_type != \"Line of Credit\"",
@@ -228,6 +231,27 @@
    "label": "Monthly Repayment Amount",
    "no_copy": 1,
    "options": "Company:company:default_currency"
+  },
+  {
+   "fieldname": "enable_special_emi",
+   "fieldtype": "Check",
+   "label": "Enable Special EMI Period",
+   "depends_on": "eval: doc.is_term_loan && doc.repayment_schedule_type != \"Line of Credit\" && doc.repayment_frequency != \"One Time\" && doc.repayment_method == \"Repay Over Number of Periods\""
+  },
+  {
+   "fieldname": "special_emi_period",
+   "fieldtype": "Int",
+   "label": "Special EMI Period",
+   "depends_on": "enable_special_emi",
+   "description": "Period for which special EMI will be applicable"
+  },
+  {
+   "fieldname": "special_emi_amount",
+   "fieldtype": "Currency",
+   "label": "Special EMI Amount",
+   "depends_on": "enable_special_emi",
+   "options": "Company:company:default_currency",
+   "description": "Fixed EMI amount for the special period"
   },
   {
    "collapsible": 1,

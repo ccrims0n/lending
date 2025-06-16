@@ -355,12 +355,20 @@ class LoanRepaymentSchedule(Document):
 		carry_forward_interest = self.adjusted_interest
 		moratorium_interest = 0
 		row = 0
+		remaining_repayment_period = self.repayment_periods - completed_tenure
 		if not self.restructure_type and self.repayment_method != "Repay Fixed Amount per Period":
 			monthly_repayment_amount = get_monthly_repayment_amount(
-				balance_amount, rate_of_interest, self.repayment_periods - completed_tenure, self.repayment_frequency
+				balance_amount, rate_of_interest, remaining_repayment_period, self.repayment_frequency
 			)
 		else:
 			monthly_repayment_amount = self.monthly_repayment_amount
+
+		# Move this to disbursement and repayment schedule
+		loan_doc = frappe.get_doc("Loan", self.loan)
+		special_emi_enabled = loan_doc.get("enable_special_emi")
+		special_emi_period = loan_doc.get("special_emi_period")
+		special_emi_amount = loan_doc.get("special_emi_amount")
+		special_emi_end_date = None
 
 		if not self.restructure_type:
 			if (
@@ -375,8 +383,12 @@ class LoanRepaymentSchedule(Document):
 				self.moratorium_end_date = add_months(self.repayment_start_date, self.moratorium_tenure)
 				if self.repayment_schedule_type == "Pro-rated calendar months":
 					self.moratorium_end_date = add_days(self.moratorium_end_date, -1)
+			elif special_emi_period and self.repayment_frequency == "Monthly":
+				special_emi_end_date = add_months(loan_doc.get("repayment_start_date"), (special_emi_period - 1))
+				remaining_repayment_period = self.repayment_periods - special_emi_period
 
 		tenure = self.get_applicable_tenure(payment_date)
+
 		additional_days = cint(self.broken_period_interest_days)
 
 		if len(self.get(schedule_field)) > 0:
@@ -384,6 +396,11 @@ class LoanRepaymentSchedule(Document):
 
 		if additional_days < 0:
 			self.broken_period_interest_days = 0
+
+		remaining_amount = None
+
+		if special_emi_enabled and self.repayment_frequency == "Monthly":
+			monthly_repayment_amount = special_emi_amount
 
 		while balance_amount > 0:
 			if self.moratorium_tenure and self.repayment_frequency == "Monthly":
@@ -395,10 +412,21 @@ class LoanRepaymentSchedule(Document):
 					):
 						balance_amount = self.loan_amount + moratorium_interest
 						monthly_repayment_amount = get_monthly_repayment_amount(
-							balance_amount, rate_of_interest, self.repayment_periods - completed_tenure, self.repayment_frequency
+							balance_amount, rate_of_interest, remaining_repayment_period, self.repayment_frequency
 						)
 						moratorium_interest = 0
 
+			if special_emi_enabled and self.repayment_frequency == "Monthly":
+				if getdate(payment_date) > getdate(special_emi_end_date) and not remaining_amount:
+					remaining_amount = balance_amount
+					frappe.logger().error(f"special_emi. remaining amount: {remaining_amount}")
+					monthly_repayment_amount = get_monthly_repayment_amount(
+						remaining_amount, rate_of_interest, remaining_repayment_period, self.repayment_frequency
+					)
+
+				# frappe.logger().error(f"rrp: {remaining_repayment_period}, monthly emi: {monthly_repayment_amount}")
+
+			# frappe.logger().error(f"tenure: {tenure}, rrp: {remaining_repayment_period}, nor: {self.number_of_rows}, rp: {self.repayment_periods}")
 			prev_balance_amount = balance_amount
 
 			payment_days, months = self.get_days_and_months(
@@ -496,6 +524,7 @@ class LoanRepaymentSchedule(Document):
 			additional_days = 0
 			additional_principal_amount = 0
 			pending_prev_days = 0
+			completed_tenure = completed_tenure + 1
 
 		if schedule_field == "repayment_schedule" and not self.restructure_type:
 			if self.repayment_frequency == "One Time":
