@@ -282,6 +282,7 @@ class LoanRepaymentSchedule(Document):
 			balance_amount,
 			additional_principal_amount,
 			pending_prev_days,
+			completed_tenure,
 		) = self.add_rows_from_prev_disbursement("repayment_schedule", 100, 100)
 
 		if flt(balance_amount, self.precision) > 0:
@@ -292,6 +293,7 @@ class LoanRepaymentSchedule(Document):
 				additional_principal_amount,
 				pending_prev_days,
 				self.rate_of_interest,
+				completed_tenure,
 				100,
 				100,
 			)
@@ -344,6 +346,7 @@ class LoanRepaymentSchedule(Document):
 		additional_principal_amount,
 		pending_prev_days,
 		rate_of_interest,
+		completed_tenure,
 		principal_share_percentage,
 		interest_share_percentage,
 		partner_schedule_type=None,
@@ -354,7 +357,7 @@ class LoanRepaymentSchedule(Document):
 		row = 0
 		if not self.restructure_type and self.repayment_method != "Repay Fixed Amount per Period":
 			monthly_repayment_amount = get_monthly_repayment_amount(
-				balance_amount, rate_of_interest, self.repayment_periods, self.repayment_frequency
+				balance_amount, rate_of_interest, self.repayment_periods - completed_tenure, self.repayment_frequency
 			)
 		else:
 			monthly_repayment_amount = self.monthly_repayment_amount
@@ -647,6 +650,7 @@ class LoanRepaymentSchedule(Document):
 							self.current_principal_amount,
 							additional_principal_amount,
 							pending_prev_days,
+							completed_tenure,
 						)
 
 					if self.restructure_type in ("Pre Payment", "Advance Payment") and completed_tenure >= 1:
@@ -778,6 +782,7 @@ class LoanRepaymentSchedule(Document):
 			balance_principal_amount,
 			additional_principal_amount,
 			pending_prev_days,
+			completed_tenure,
 		)
 
 	def set_repayment_start_date(self):
