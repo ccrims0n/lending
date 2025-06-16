@@ -395,7 +395,7 @@ class LoanRepaymentSchedule(Document):
 					):
 						balance_amount = self.loan_amount + moratorium_interest
 						monthly_repayment_amount = get_monthly_repayment_amount(
-							balance_amount, rate_of_interest, self.repayment_periods, self.repayment_frequency
+							balance_amount, rate_of_interest, self.repayment_periods - completed_tenure, self.repayment_frequency
 						)
 						moratorium_interest = 0
 
