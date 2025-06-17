@@ -1,10 +1,18 @@
 import math
+import logging
 
 import frappe
 from frappe.utils import add_months, cint, flt, get_last_day, getdate
 
-frappe.utils.logger.set_log_level("INFO")
-logger = frappe.logger("loan_repayment", allow_site=True, file_count=10, max_size=10485760)
+
+logger = logging.getLogger("loan_repayment_stream")
+logger.setLevel(logging.INFO)
+logger.handlers = []
+stream_handler = logging.StreamHandler()
+formatter = logging.Formatter('[%(asctime)s] %(levelname)s %(message)s')
+stream_handler.setFormatter(formatter)
+logger.addHandler(stream_handler)
+
 
 def add_single_month(date):
 	if getdate(date) == get_last_day(date):
@@ -55,7 +63,7 @@ def get_amounts(
     pending_prev_days=0,
 ):
     user = frappe.session.user if hasattr(frappe.session, "user") else "system"
-    logger.info(f"{user} called get_amounts with params: balance_amount={balance_amount}, "
+    logger.info(f"{user} called get_amounts with params: balance_amount={balance_amount},"
                 f"rate_of_interest={rate_of_interest}, days={days}, months={months}, "
                 f"monthly_repayment_amount={monthly_repayment_amount}, "
                 f"carry_forward_interest={carry_forward_interest}, "
