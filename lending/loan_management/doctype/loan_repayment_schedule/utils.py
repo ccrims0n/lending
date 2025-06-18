@@ -32,7 +32,7 @@ def get_monthly_repayment_amount(loan_amount, rate_of_interest, repayment_period
 			/ ((1 + monthly_interest_rate) ** repayment_periods - 1)
 		)
 	else:
-		monthly_repayment_amount = math.ceil(flt(loan_amount) / repayment_periods)
+		monthly_repayment_amount = flt(loan_amount) / repayment_periods
 	return monthly_repayment_amount
 
 
