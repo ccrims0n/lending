@@ -386,7 +386,6 @@ class LoanDisbursement(AccountsController):
 		):
 			frappe.throw(_("Repayment Start Date cannot be before Disbursement Date"))
 
-
 	def validate_disbursal_amount(self):
 		possible_disbursal_amount, pending_principal_amount = get_disbursal_amount(self.against_loan)
 		limit_details = frappe.db.get_value(
