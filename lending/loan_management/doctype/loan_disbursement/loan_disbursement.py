@@ -380,7 +380,6 @@ class LoanDisbursement(AccountsController):
 	def set_repayment_start_date(self):
 		self.repayment_start_date = self.disbursement_date
 	
-
 	def validate_repayment_start_date(self):
 		if self.repayment_start_date and getdate(self.repayment_start_date) < getdate(
 			self.disbursement_date
