@@ -99,7 +99,6 @@ class LoanDisbursement(AccountsController):
 		self.set_status()
 		self.set_missing_values()
 		self.validate_disbursal_amount()
-		self.set_repayment_start_date()
 		if self.repayment_schedule_type == "Line of Credit":
 			self.set_cyclic_date()
 
@@ -376,9 +375,6 @@ class LoanDisbursement(AccountsController):
 			sd.cancel()
 			sd.delete()
 
-
-	def set_repayment_start_date(self):
-		self.repayment_start_date = self.disbursement_date
 	
 	def validate_repayment_start_date(self):
 		if self.repayment_start_date and getdate(self.repayment_start_date) < getdate(
