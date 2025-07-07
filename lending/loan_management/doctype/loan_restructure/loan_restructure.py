@@ -542,21 +542,21 @@ class LoanRestructure(AccountsController):
 
 		total_principal_paid = 0
 		total_amount_paid = 0
-		old_remaining_amount = self.old_loan_amount - self.disbursed_amount
-		loan_amount = self.new_loan_amount + old_remaining_amount
+		# old_remaining_amount = self.old_loan_amount - self.disbursed_amount
+		# loan_amount = self.new_loan_amount + old_remaining_amount
 		monthly_repayment_amount = schedule.monthly_repayment_amount
 
 		if cancel:
 			total_principal_paid = self.total_principal_paid
 			total_amount_paid = self.total_amount_paid
-			loan_amount = self.disbursed_amount
+			# loan_amount = self.disbursed_amount
 			monthly_repayment_amount = self.old_emi
 
 		frappe.db.set_value(
 			"Loan",
 			self.loan,
 			{
-				"loan_amount": loan_amount,
+				# "loan_amount": loan_amount,
 				"rate_of_interest": self.new_rate_of_interest,
 				"monthly_repayment_amount": monthly_repayment_amount,
 				"total_payment": total_payment,
@@ -786,7 +786,7 @@ def get_restructure_details(
 
 
 def get_pending_tenure_and_start_date(loan, posting_date, repayment_type, loan_disbursement=None):
-	# from lending.loan_management.doctype.loan.loan import get_cyclic_date
+	from lending.loan_management.doctype.loan.loan import get_cyclic_date
 
 	ignore_bpi = False
 
@@ -820,14 +820,14 @@ def get_pending_tenure_and_start_date(loan, posting_date, repayment_type, loan_d
 
 	if repayment_frequency == "One Time":
 		repayment_start_date = prev_repayment_start_date
-	# elif repayment_schedule_type in "Monthly as per cycle date" and repayment_frequency == "Monthly":
-	# 	# Skipping cyclic date calculation for migrated or manually updated repayment schedules.
-	# 	# In migrated loans or where repayment_start_date was explicitly modified,
-	# 	# we should retain the existing schedule dates and not recalculate based on product cycle.
-	# 	if repayment_type == "Pre Payment":
-	# 		ignore_bpi = True
+	elif repayment_schedule_type in "Monthly as per cycle date" and repayment_frequency == "Monthly":
+		# Skipping cyclic date calculation for migrated or manually updated repayment schedules.
+		# In migrated loans or where repayment_start_date was explicitly modified,
+		# we should retain the existing schedule dates and not recalculate based on product cycle.
+		if repayment_type == "Pre Payment":
+			ignore_bpi = True
 
-	# 	repayment_start_date = get_cyclic_date(loan_product, posting_date, ignore_bpi=ignore_bpi)
+		repayment_start_date = get_cyclic_date(loan_product, posting_date, ignore_bpi=ignore_bpi)
 	else:
 		if getdate(posting_date) <= getdate(prev_repayment_start_date):
 			repayment_start_date = prev_repayment_start_date
