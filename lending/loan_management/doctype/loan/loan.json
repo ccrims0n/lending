@@ -26,6 +26,9 @@
   "cancellation_date",
   "settlement_date",
   "column_break_11",
+  "interest_rate_type",
+  "interest_rate_type_link",
+  "additional_interest_rate",
   "rate_of_interest",
   "penalty_charges_rate",
   "disbursement_date",
@@ -185,12 +188,37 @@
    "options": "Company:company:default_currency"
   },
   {
+   "fieldname": "interest_rate_type",
+   "fieldtype": "Select",
+   "label": "Interest Rate Type",
+   "options": "Fixed\nFloating",
+   "reqd": 1,
+   "default": "Fixed"
+  },
+  {
+   "depends_on": "eval:doc.interest_rate_type == 'Fixed'",
+   "mandatory_depends_on": "eval:doc.interest_rate_type == 'Fixed'",
    "fetch_from": "loan_product.rate_of_interest",
    "fetch_if_empty": 1,
    "fieldname": "rate_of_interest",
    "fieldtype": "Percent",
-   "label": "Rate of Interest (%) / Year",
-   "reqd": 1
+   "label": "Rate of Interest (%) / Year"
+  },
+  {
+   "depends_on": "eval:doc.interest_rate_type == 'Floating'",
+   "mandatory_depends_on": "eval:doc.interest_rate_type == 'Floating'",
+   "fieldname": "interest_rate_type_link",
+   "fieldtype": "Link",
+   "label": "Interest Rate Type",
+   "options": "Interest Rate Type"
+  },
+  {
+   "depends_on": "eval:doc.interest_rate_type == 'Floating'",
+   "mandatory_depends_on": "eval:doc.interest_rate_type == 'Floating'",
+   "fieldname": "additional_interest_rate",
+   "fieldtype": "Percent",
+   "label": "Additional Interest Rate (%) / Year",
+   "default": 0
   },
   {
    "depends_on": "eval:doc.status==\"Disbursed\"",

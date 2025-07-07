@@ -1873,6 +1873,7 @@ class LoanRepayment(AccountsController):
 			return
 
 		gle_map = self.get_gl_map()
+		frappe.logger().error(gle_map)
 		if gle_map:
 			make_gl_entries(gle_map, cancel=cancel, adv_adj=adv_adj)
 

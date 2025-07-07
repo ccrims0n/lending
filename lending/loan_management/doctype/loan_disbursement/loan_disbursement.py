@@ -727,7 +727,7 @@ class LoanDisbursement(AccountsController):
 				)
 
 		self.add_bpi_difference_entry(gle_map)
-
+		frappe.logger().error(gle_map)
 		if gle_map:
 			if cancel:
 				gle_map = process_gl_map(gle_map)

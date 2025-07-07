@@ -216,6 +216,8 @@ class LoanInterestAccrual(AccountsController):
 		if self.interest_amount:
 			final_interest_amount = self.interest_amount - self.additional_interest_amount
 			if flt(final_interest_amount, precision):
+				account_type = frappe.db.get_value("Account", receivable_account, "account_type")
+
 				gle_map.append(
 					self.get_gl_dict(
 						{
@@ -229,11 +231,14 @@ class LoanInterestAccrual(AccountsController):
 								self.last_accrual_date, self.posting_date, self.loan
 							),
 							"cost_center": cost_center,
+							"party_type": self.applicant_type if account_type in ("Receivable", "Payable") else None,
+							"party": self.applicant if account_type in ("Receivable", "Payable") else None,
 							"posting_date": self.accrual_date,
 						}
 					)
 				)
 
+				account_type = frappe.db.get_value("Account", income_account, "account_type")
 				gle_map.append(
 					self.get_gl_dict(
 						{
@@ -247,12 +252,15 @@ class LoanInterestAccrual(AccountsController):
 								self.last_accrual_date, self.posting_date, self.loan
 							),
 							"cost_center": cost_center,
+							"party_type": self.applicant_type if account_type in ("Receivable", "Payable") else None,
+							"party": self.applicant if account_type in ("Receivable", "Payable") else None,
 							"posting_date": self.accrual_date,
 						}
 					)
 				)
 
 		if flt(self.additional_interest_amount, precision):
+			account_type = frappe.db.get_value("Account", account_details.additional_interest_accrued, "account_type")
 			gle_map.append(
 				self.get_gl_dict(
 					{
@@ -266,11 +274,14 @@ class LoanInterestAccrual(AccountsController):
 							self.last_accrual_date, self.posting_date, self.loan
 						),
 						"cost_center": cost_center,
+						"party_type": self.applicant_type if account_type in ("Receivable", "Payable") else None,
+						"party": self.applicant if account_type in ("Receivable", "Payable") else None,
 						"posting_date": self.accrual_date,
 					}
 				)
 			)
 
+			account_type = frappe.db.get_value("Account", account_details.additional_interest_income, "account_type")
 			gle_map.append(
 				self.get_gl_dict(
 					{
@@ -284,6 +295,8 @@ class LoanInterestAccrual(AccountsController):
 							self.last_accrual_date, self.posting_date, self.loan
 						),
 						"cost_center": cost_center,
+						"party_type": self.applicant_type if account_type in ("Receivable", "Payable") else None,
+						"party": self.applicant if account_type in ("Receivable", "Payable") else None,
 						"posting_date": self.accrual_date,
 					}
 				)
@@ -291,6 +304,46 @@ class LoanInterestAccrual(AccountsController):
 
 		if gle_map:
 			make_gl_entries(gle_map, cancel=cancel, adv_adj=adv_adj, merge_entries=False)
+
+
+def get_effective_interest_rate(loan, posting_date):
+	"""
+	Returns the effective interest rate for the loan on the given posting_date.
+	For fixed: returns loan.rate_of_interest
+	For floating: fetches from Interest Rate DocType and adds additional_interest_rate
+	"""
+	if getattr(loan, 'interest_rate_type', None) == 'Floating':
+		# Get the Interest Rate Type link
+		interest_rate_type = getattr(loan, 'interest_rate_type_link', None)
+		additional_interest_rate = getattr(loan, 'additional_interest_rate', 0) or 0
+		if not interest_rate_type:
+			frappe.throw('Interest Rate Type is required for floating rate loans.')
+		# Find the Interest Rate record valid for this date
+		rate_doc = frappe.db.get_value(
+			'Interest Rate',
+			{
+				'type': interest_rate_type,
+				'valid_from': ('<=', posting_date),
+				'valid_to': ('>=', posting_date)
+			},
+			'rate'
+		)
+		if not rate_doc:
+			# If no valid_to, check for open-ended
+			rate_doc = frappe.db.get_value(
+				'Interest Rate',
+				{
+					'type': interest_rate_type,
+					'valid_from': ('<=', posting_date),
+					'valid_to': ['is', None]
+				},
+				'rate'
+			)
+		if not rate_doc:
+			frappe.throw(f'No valid Interest Rate found for type {interest_rate_type} on {posting_date}')
+		return float(rate_doc) + float(additional_interest_rate)
+	else:
+		return getattr(loan, 'rate_of_interest', 0)
 
 
 # For Eg: If Loan disbursement date is '01-09-2019' and disbursed amount is 1000000 and
@@ -346,11 +399,11 @@ def calculate_accrual_amount_for_loans(
 			return
 
 		pending_principal_amount = get_pending_principal_amount(loan)
-
+		effective_rate = get_effective_interest_rate(loan, posting_date)
 		payable_interest = get_interest_amount(
 			no_of_days,
 			principal_amount=pending_principal_amount,
-			rate_of_interest=loan.rate_of_interest,
+			rate_of_interest=effective_rate,
 			company=loan.company,
 			posting_date=posting_date,
 		)
@@ -365,7 +418,7 @@ def calculate_accrual_amount_for_loans(
 				posting_date,
 				accrual_type,
 				"Normal Interest",
-				loan.rate_of_interest,
+				effective_rate,
 			)
 
 	if is_future_accrual:
@@ -429,9 +482,10 @@ def process_loan_interest_accrual_per_schedule(
 			)
 
 			pending_principal_amount = get_principal_amount_for_term_loan(parent, payment_date)
+			effective_rate = get_effective_interest_rate(loan, payment_date)
 			payable_interest = get_interest_for_term(
 				loan.company,
-				loan.rate_of_interest,
+				effective_rate,
 				pending_principal_amount,
 				last_accrual_date_for_schedule,
 				payment_date,
@@ -449,12 +503,12 @@ def process_loan_interest_accrual_per_schedule(
 						payment_date,
 						accrual_type,
 						"Normal Interest",
-						loan.rate_of_interest,
+						effective_rate,
 						loan_repayment_schedule=parent,
 						accrual_date=payment_date,
 					)
-			elif is_future_accrual:
-				last_accrual_date = payment_date
+				elif is_future_accrual:
+					last_accrual_date = payment_date
 
 	return total_payable_interest
 

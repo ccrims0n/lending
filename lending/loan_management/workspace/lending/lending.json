@@ -223,6 +223,7 @@
    "type": "Link"
   },
   {
+   "dependencies": "",
    "hidden": 0,
    "is_query_report": 0,
    "label": "Process Loan Demand",
@@ -233,11 +234,23 @@
    "type": "Link"
   },
   {
+   "dependencies": "",
    "hidden": 0,
    "is_query_report": 0,
    "label": "Process Loan Classificaiton",
    "link_count": 0,
    "link_to": "Process Loan Classification",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Process Interest Rate",
+   "link_count": 0,
+   "link_to": "Process Interest Rate",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"

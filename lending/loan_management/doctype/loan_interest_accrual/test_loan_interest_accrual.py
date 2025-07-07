@@ -87,6 +87,73 @@ class TestLoanInterestAccrual(IntegrationTestCase):
 		self.assertEqual(getdate(last_accrual_date_a), getdate("2024-04-10"))
 		self.assertEqual(getdate(last_accrual_date_b), getdate("2024-04-20"))
 
+	def test_floating_rate_interest_accrual(self):
+		set_loan_accrual_frequency("Daily")
+
+		# Setup Interest Rate Type and Interest Rate
+		interest_rate_type = frappe.get_doc({
+			"doctype": "Interest Rate Type",
+			"interest_rate_type": "Test Floating Type"
+		})
+		interest_rate_type.insert(ignore_permissions=True)
+
+		interest_rate = frappe.get_doc({
+			"doctype": "Interest Rate",
+			"type": interest_rate_type.name,
+			"rate": 8.5,
+			"valid_from": "2024-05-01 00:00:00",
+			"valid_to": None
+		})
+		interest_rate.insert(ignore_permissions=True)
+
+		posting_date = "2024-05-10"
+		repayment_start_date = "2024-06-10"
+		loan_amount = 100000
+		additional_interest_rate = 1.5
+
+		loan = create_loan(
+			self.applicant2,
+			"Term Loan Product 4",
+			loan_amount,
+			"Repay Over Number of Periods",
+			6,
+			applicant_type="Customer",
+			repayment_start_date=repayment_start_date,
+			posting_date=posting_date,
+			interest_rate_type="Floating",
+			interest_rate_type_link=interest_rate_type.name,
+			additional_interest_rate=additional_interest_rate,
+		)
+		loan.submit()
+		make_loan_disbursement_entry(
+			loan.name,
+			loan.loan_amount,
+			disbursement_date=posting_date,
+			repayment_start_date=repayment_start_date,
+		)
+
+		loan_batch = [get_loan_object(loan.load_from_db())]
+
+		process_interest_accrual_batch(
+			loans=loan_batch,
+			posting_date="2024-05-20",
+			process_loan_interest="",
+			accrual_type="Regular",
+			accrual_date="2024-05-20",
+		)
+
+		# Check the interest accrual
+		accrual = frappe.get_doc(
+			"Loan Interest Accrual",
+			{
+				"loan": loan.name,
+				"docstatus": 1,
+				"posting_date": "2024-05-20 00:00:00"
+			}
+		)
+		# Should use 8.5 + 1.5 = 10.0 as rate
+		self.assertAlmostEqual(accrual.rate_of_interest, 10.0, places=2)
+
 
 def get_loan_object(loan_doc):
 	return frappe._dict(

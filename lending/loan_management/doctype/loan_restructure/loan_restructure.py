@@ -542,7 +542,8 @@ class LoanRestructure(AccountsController):
 
 		total_principal_paid = 0
 		total_amount_paid = 0
-		loan_amount = self.new_loan_amount
+		old_remaining_amount = self.old_loan_amount - self.disbursed_amount
+		loan_amount = self.new_loan_amount + old_remaining_amount
 		monthly_repayment_amount = schedule.monthly_repayment_amount
 
 		if cancel:

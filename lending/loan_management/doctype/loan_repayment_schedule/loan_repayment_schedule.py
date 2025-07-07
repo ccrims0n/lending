@@ -14,6 +14,7 @@ from frappe.utils import (
 	get_first_day,
 	get_last_day,
 	getdate,
+	nowdate,
 )
 
 from lending.loan_management.doctype.loan.loan import get_cyclic_date
@@ -25,6 +26,7 @@ from lending.loan_management.doctype.loan_repayment_schedule.utils import (
 	get_monthly_repayment_amount,
 	set_demand,
 )
+from lending.loan_management.doctype.loan_interest_accrual.loan_interest_accrual import get_effective_interest_rate
 
 
 # nosemgrep
@@ -99,6 +101,9 @@ class LoanRepaymentSchedule(Document):
 
 	def validate(self):
 		self.number_of_rows = 0
+		# Set the effective rate of interest for this schedule
+		loan_doc = frappe.get_doc("Loan", self.loan)
+		self.rate_of_interest = get_effective_interest_rate(loan_doc, self.posting_date or nowdate())
 		self.set_repayment_period()
 		self.set_repayment_start_date()
 		self.validate_repayment_method()
@@ -383,9 +388,10 @@ class LoanRepaymentSchedule(Document):
 				self.moratorium_end_date = add_months(self.repayment_start_date, self.moratorium_tenure)
 				if self.repayment_schedule_type == "Pro-rated calendar months":
 					self.moratorium_end_date = add_days(self.moratorium_end_date, -1)
-			elif special_emi_period and self.repayment_frequency == "Monthly":
-				special_emi_end_date = add_months(loan_doc.get("repayment_start_date"), (special_emi_period - 1))
-				remaining_repayment_period = self.repayment_periods - special_emi_period
+
+		if special_emi_period and self.repayment_frequency == "Monthly":
+			special_emi_end_date = add_months(loan_doc.get("repayment_start_date"), (special_emi_period - 1))
+			remaining_repayment_period = self.repayment_periods - special_emi_period
 
 		tenure = self.get_applicable_tenure(payment_date)
 
@@ -635,7 +641,8 @@ class LoanRepaymentSchedule(Document):
 				):
 					for row in prev_schedule.get(schedule_field):
 						if getdate(row.payment_date) < getdate(self.posting_date) or (
-							getdate(row.payment_date) == getdate(self.posting_date) and self.restructure_type
+							getdate(row.payment_date) == getdate(self.posting_date)
+							and self.restructure_type in ("Normal Restructure", "Pre Payment", "Advance Payment")
 						):
 
 							if getdate(row.payment_date) == getdate(self.posting_date) and self.restructure_type in (
@@ -662,6 +669,8 @@ class LoanRepaymentSchedule(Document):
 							self.repayment_start_date = row.payment_date
 							prev_repayment_date = row.payment_date
 							break
+
+					balance_principal_amount = prev_balance_amount
 
 					if (
 						self.moratorium_end_date

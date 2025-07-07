@@ -25,6 +25,8 @@ def get_monthly_repayment_amount(loan_amount, rate_of_interest, repayment_period
 	if frequency == "One Time":
 		repayment_periods = 1
 
+	frappe.logger().error(f"LA: {loan_amount}, ROI: {rate_of_interest}, RPP: {repayment_periods}, F: {frequency}")
+
 	if rate_of_interest:
 		monthly_interest_rate = flt(rate_of_interest) / (get_frequency(frequency) * 100)
 		monthly_repayment_amount = (

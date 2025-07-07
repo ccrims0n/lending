@@ -614,6 +614,9 @@ def create_loan(
 	moratorium_type=None,
 	penalty_charges_rate=None,
 	repayment_frequency=None,
+	interest_rate_type=None,
+	interest_rate_type_link=None,
+	additional_interest_rate=None,
 ):
 
 	loan = frappe.get_doc(
@@ -640,6 +643,14 @@ def create_loan(
 			"repayment_frequency": repayment_frequency or "Monthly",
 		}
 	)
+
+	# Add floating rate fields if provided
+	if interest_rate_type:
+		loan.interest_rate_type = interest_rate_type
+	if interest_rate_type_link:
+		loan.interest_rate_type_link = interest_rate_type_link
+	if additional_interest_rate is not None:
+		loan.additional_interest_rate = additional_interest_rate
 
 	loan.save()
 	return loan

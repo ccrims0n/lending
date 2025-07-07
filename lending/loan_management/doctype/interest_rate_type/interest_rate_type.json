@@ -5,6 +5,8 @@
   "doctype": "DocType",
   "editable_grid": 1,
   "engine": "InnoDB",
+  "title_field": "source",
+  "show_title_field_in_link": 1,
   "field_order": [
     "source"
   ],

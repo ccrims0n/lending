@@ -63,6 +63,7 @@ frappe.ui.form.on('Loan', {
 			});
 		})
 
+		frm.trigger('toggle_interest_rate_fields');
 	},
 
 	refresh: function (frm) {
@@ -111,6 +112,7 @@ frappe.ui.form.on('Loan', {
 		}
 		frm.trigger("toggle_fields");
 		frm.trigger("add_dashboard_stats");
+		frm.trigger('toggle_interest_rate_fields');
 	},
 
 	add_dashboard_stats: function(frm) {
@@ -314,5 +316,25 @@ frappe.ui.form.on('Loan', {
 	toggle_fields: function (frm) {
 		frm.toggle_enable("monthly_repayment_amount", frm.doc.repayment_method == "Repay Fixed Amount per Period")
 		frm.toggle_enable("repayment_periods", frm.doc.repayment_method == "Repay Over Number of Periods")
+	},
+
+	interest_rate_type: function(frm) {
+		frm.trigger('toggle_interest_rate_fields');
+	},
+
+	toggle_interest_rate_fields: function(frm) {
+		if (frm.doc.interest_rate_type === 'Fixed') {
+			frm.set_df_property('rate_of_interest', 'reqd', 1);
+			frm.set_df_property('rate_of_interest', 'hidden', 0);
+			frm.set_df_property('interest_rate_type_link', 'reqd', 0);
+			frm.set_df_property('interest_rate_type_link', 'hidden', 1);
+			frm.set_df_property('additional_interest_rate', 'hidden', 1);
+		} else if (frm.doc.interest_rate_type === 'Floating') {
+			frm.set_df_property('rate_of_interest', 'reqd', 0);
+			frm.set_df_property('rate_of_interest', 'hidden', 1);
+			frm.set_df_property('interest_rate_type_link', 'reqd', 1);
+			frm.set_df_property('interest_rate_type_link', 'hidden', 0);
+			frm.set_df_property('additional_interest_rate', 'hidden', 0);
+		}
 	}
 });
