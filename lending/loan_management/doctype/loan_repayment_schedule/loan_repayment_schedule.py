@@ -342,15 +342,19 @@ class LoanRepaymentSchedule(Document):
 		# Get repayment start date
 		if hasattr(self, 'loan_disbursement') and self.loan_disbursement:
 			repayment_start_date = self._get_first_disbursement_date()
+			print(f"Repayment start date from loan_disbursement: {repayment_start_date}")
 		else:
 			repayment_start_date = getattr(self, "repayment_start_date", None)
+			print(f"Repayment start date from self: {repayment_start_date}")
 			if isinstance(repayment_start_date, str):
 				try:
 					repayment_start_date = frappe.utils.getdate(repayment_start_date)
 				except (ValueError, AttributeError):
+					print("Error getting date from string")
 					repayment_start_date = frappe.utils.nowdate()
 			elif repayment_start_date is None:
 				repayment_start_date = frappe.utils.nowdate()
+				
 
 		# Only calculate if we have valid values
 		if principal > 0 and tenure_months > 0:
@@ -665,7 +669,8 @@ class LoanRepaymentSchedule(Document):
 				# Calculate payment date based on original loan start date and the month number from original schedule
 				# The month number should be months_passed + month (to continue from where we left off)
 				original_month_number = months_passed + month
-				payment_date = self._calculate_payment_date(original_start_date, original_month_number)
+				payment_date = self._calculate_payment_date_with_offset(original_start_date, original_month_number)
+				print(f"Payment date calculation: original_month_number={original_month_number}, payment_date={payment_date}")
 				
 				# Calculate interest and principal
 				interest = round(running_balance * monthly_rate, 2)
@@ -735,7 +740,7 @@ class LoanRepaymentSchedule(Document):
 		current_emi = standard_emi
 
 		# Precompute payment dates
-		payment_dates = [self._calculate_payment_date(repayment_start_date, m) for m in range(1, tenure_months + 1)]
+		payment_dates = [self._calculate_payment_date_with_offset(repayment_start_date, m) for m in range(1, tenure_months + 1)]
 
 		# Generate schedule for each month
 		for month in range(1, tenure_months + 1):
@@ -851,12 +856,20 @@ class LoanRepaymentSchedule(Document):
 		emi = principal * monthly_rate * factor / (factor - 1)
 		return round(emi, 2)
 
-	def _calculate_payment_date(self, start_date, month):
+	def _calculate_payment_date_with_offset(self, start_date, month):
 		"""Calculate the payment date for a given month."""
 		from frappe.utils import add_months
 		
 		# Calculate payment date by adding months
-		payment_date = add_months(start_date, month - 2)  # month - 1 because first payment is on start date
+		payment_date = add_months(start_date, month - 1)  # month - 1 because first payment is on start date
+		return payment_date
+	
+	def _calculate_payment_date(self, start_date, month): #without offset
+		"""Calculate the payment date for a given month."""
+		from frappe.utils import add_months
+		
+		# Calculate payment date by adding months
+		payment_date = add_months(start_date, month)  # month - 1 because first payment is on start date
 		return payment_date
 
 	def _get_special_emi_for_month(self, month, special_emi):
