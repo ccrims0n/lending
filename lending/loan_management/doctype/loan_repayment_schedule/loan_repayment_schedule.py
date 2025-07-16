@@ -156,19 +156,15 @@ class LoanRepaymentSchedule(Document):
                     
                     print(f"DEBUG: Standard EMI: {standard_emi}, Special EMI: {special_emi_amount}")
                     
-                    # Check if special EMI is significantly different from standard EMI
-                    # If the difference is less than 10%, it might be a configuration error
-                    if abs(special_emi_amount - standard_emi) / standard_emi < 0.1:
-                        print("DEBUG: Special EMI too close to standard EMI, ignoring special EMI")
-                        print(f"DEBUG: Special EMI ({special_emi_amount}) is only {abs(special_emi_amount - standard_emi) / standard_emi * 100:.1f}% different from standard EMI ({standard_emi})")
-                        special_emi = None
-                    else:
-                        special_emi_dict = {}
-                        for month in range(1, special_emi_period + 1):
-                            special_emi_dict[month] = special_emi_amount
-                        special_emi = special_emi_dict
-                        print(f"DEBUG: Special EMI dict created: {special_emi}")
-                        print(f"DEBUG: Special EMI ({special_emi_amount}) is {abs(special_emi_amount - standard_emi) / standard_emi * 100:.1f}% different from standard EMI ({standard_emi})")
+                    # For multiple disbursements, we should always respect the special EMI configuration
+                    # from the loan document, regardless of the difference from standard EMI
+                    special_emi_dict = {}
+                    for month in range(1, special_emi_period + 1):
+                        special_emi_dict[month] = special_emi_amount
+                    special_emi = special_emi_dict
+                    print(f"DEBUG: Special EMI dict created: {special_emi}")
+                    print(f"DEBUG: Special EMI ({special_emi_amount}) will be applied for first {special_emi_period} months")
+                    print(f"DEBUG: Special EMI period: {special_emi_period} months")
                 else:
                     print("DEBUG: Special EMI not enabled or invalid, using standard EMI")
                     print(f"DEBUG: enable_special_emi: {enable_special_emi}, special_emi_amount: {special_emi_amount}, special_emi_period: {special_emi_period}")
@@ -186,6 +182,8 @@ class LoanRepaymentSchedule(Document):
                 )
                 # Pass parent document reference for disbursement tracking
                 self._engine._parent_doc = self
+                # Pass special EMI period for calculations
+                self._engine._special_emi_period = special_emi_period
                 
                 # Calculate schedule
                 print("DEBUG: Calling engine.validate()")  # Debug line
@@ -889,9 +887,9 @@ class _RepaymentEngine:
         if isinstance(self.special_emi, dict):
             special_emi_period = max(self.special_emi.keys()) if self.special_emi else 0
         elif isinstance(self.special_emi, (int, float)):
-            # For constant special EMI, we need to determine the period
-            # This is a simplified approach - in practice, you'd need to specify the period
-            special_emi_period = 24  # Default to 24 months for constant special EMI
+            # For constant special EMI, use the period passed to the engine
+            special_emi_period = getattr(self, '_special_emi_period', 0)
+            print(f"DEBUG: Using special_emi_period from engine: {special_emi_period}")
         
         if special_emi_period == 0:
             return self.standard_emi
@@ -1076,20 +1074,35 @@ class _RepaymentEngine:
                 emi = special_emi_for_month
                 print(f"DEBUG: Using special EMI for month {month}: {emi}")
             else:
-                # Recalculate standard EMI for the remaining balance and tenure
-                if self.monthly_rate == 0:
-                    emi = round(running_balance / (self.tenure_months - month + 1), self.rounding)
+                # No special EMI for this month - use standard EMI calculation
+                # Recalculate EMI if this is the first month, there's a new disbursement, 
+                # or if we're transitioning from special EMI period to standard EMI
+                should_recalculate = (new_disb or (month == 1) or 
+                                    (hasattr(self, 'special_emi') and isinstance(self.special_emi, dict) and 
+                                     month > max(self.special_emi.keys()) if self.special_emi else 0))
+                
+                if should_recalculate:
+                    # Recalculate standard EMI for the remaining balance and tenure
+                    if self.monthly_rate == 0:
+                        emi = round(running_balance / (self.tenure_months - month + 1), self.rounding)
+                    else:
+                        remaining_months = self.tenure_months - month + 1
+                        factor = (1 + self.monthly_rate) ** remaining_months
+                        emi = round(running_balance * self.monthly_rate * factor / (factor - 1), self.rounding)
+                    
+                    print(f"DEBUG: Recalculated standard EMI for month {month}: {emi}")
+                    print(f"DEBUG: running_balance: {running_balance}, remaining_months: {self.tenure_months - month + 1}")
+                    print(f"DEBUG: self.standard_emi value: {self.standard_emi}")
+                    print(f"DEBUG: should_recalculate reason: new_disb={new_disb}, month==1={month==1}, transitioning_from_special_emi={hasattr(self, 'special_emi') and isinstance(self.special_emi, dict) and month > max(self.special_emi.keys()) if self.special_emi else 0}")
+                    
+                    # Update current_emi for future months
+                    current_emi = emi
                 else:
-                    remaining_months = self.tenure_months - month + 1
-                    factor = (1 + self.monthly_rate) ** remaining_months
-                    emi = round(running_balance * self.monthly_rate * factor / (factor - 1), self.rounding)
-                
-                print(f"DEBUG: Recalculated standard EMI for month {month}: {emi}")
-                print(f"DEBUG: running_balance: {running_balance}, remaining_months: {self.tenure_months - month + 1}")
-                print(f"DEBUG: self.standard_emi value: {self.standard_emi}")
-                
-                # Update current_emi for future months
-                current_emi = emi
+                    # Use the current EMI that was calculated for this disbursement period
+                    emi = current_emi
+                    print(f"DEBUG: Using current EMI for month {month}: {emi}")
+                    print(f"DEBUG: running_balance: {running_balance}, current_emi: {current_emi}")
+                    print(f"DEBUG: self.standard_emi value: {self.standard_emi}")
             
             # Ensure EMI doesn't exceed the remaining balance + interest
             max_payment = running_balance + interest
@@ -1191,9 +1204,12 @@ class _RepaymentEngine:
             print(f"DEBUG: Using constant special EMI for month {month}: {result}")
             return result
         elif isinstance(self.special_emi, dict):
-            # Month-specific special EMI
+            # Month-specific special EMI - only return if month exists in dict
             result = self.special_emi.get(month)
-            print(f"DEBUG: Using month-specific special EMI for month {month}: {result}")
+            if result is not None:
+                print(f"DEBUG: Using month-specific special EMI for month {month}: {result}")
+            else:
+                print(f"DEBUG: No special EMI configured for month {month} (not in special_emi dict)")
             return result
         
         print(f"DEBUG: No special EMI found for month {month}")
