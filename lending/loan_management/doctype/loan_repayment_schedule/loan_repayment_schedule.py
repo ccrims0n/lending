@@ -279,29 +279,809 @@ class LoanRepaymentSchedule(Document):
 			self.repayment_frequency = "One Time"
 
 	def make_customer_repayment_schedule(self):
+		"""Generate customer repayment schedule with support for multiple disbursements and special EMI."""
+		print("=== Starting make_customer_repayment_schedule ===")
 		self.set("repayment_schedule", [])
-
 		self.broken_period_interest = 0
-		(
-			previous_interest_amount,
-			balance_amount,
-			additional_principal_amount,
-			pending_prev_days,
-			completed_tenure,
-		) = self.add_rows_from_prev_disbursement("repayment_schedule", 100, 100)
 
-		if flt(balance_amount, self.precision) > 0:
-			self.make_repayment_schedule(
-				"repayment_schedule",
-				previous_interest_amount,
-				balance_amount,
-				additional_principal_amount,
-				pending_prev_days,
-				self.rate_of_interest,
-				completed_tenure,
-				100,
-				100,
+		# Check if this is a subsequent disbursement
+		is_subsequent = self._is_subsequent_disbursement()
+		print(f"Determined is_subsequent_disbursement: {is_subsequent}")
+		
+		if is_subsequent:
+			print("Handling as subsequent disbursement")
+			self._handle_subsequent_disbursement()
+		else:
+			print("Handling as first disbursement")
+			# First disbursement - use the original logic
+			self._handle_first_disbursement()
+		
+		print("=== Finished make_customer_repayment_schedule ===")
+
+	def _is_subsequent_disbursement(self):
+		"""Check if this is a subsequent disbursement (not the first one)."""
+		if not hasattr(self, 'loan_disbursement') or not self.loan_disbursement:
+			print("No loan_disbursement found, treating as first disbursement")
+			return False
+		
+		# Get the current disbursement details
+		current_disbursement = frappe.get_doc("Loan Disbursement", self.loan_disbursement)
+		current_disbursement_date = current_disbursement.disbursement_date
+		current_disbursement_amount = current_disbursement.disbursed_amount
+		
+		print(f"Current disbursement: {self.loan_disbursement}, date: {current_disbursement_date}, amount: {current_disbursement_amount}")
+		
+		# Check if there are any previous disbursements
+		previous_disbursements = frappe.get_all(
+			"Loan Disbursement",
+			filters={
+				"against_loan": self.loan,
+				"docstatus": 1,  # Only submitted disbursements
+				"disbursement_date": ["<", current_disbursement_date]
+			},
+			fields=["name", "disbursed_amount", "disbursement_date"],
+			order_by="disbursement_date"
+		)
+		
+		print(f"Found {len(previous_disbursements)} previous disbursements:")
+		for d in previous_disbursements:
+			print(f"  - {d['name']}: {d['disbursed_amount']} on {d['disbursement_date']}")
+		
+		is_subsequent = len(previous_disbursements) > 0
+		print(f"Is subsequent disbursement: {is_subsequent}")
+		
+		return is_subsequent
+
+	def _handle_first_disbursement(self):
+		"""Handle the first disbursement using the original logic."""
+		# Get effective principal for new disbursement (handles multiple disbursements)
+		principal = self._get_effective_principal_for_new_disbursement()
+		annual_interest_rate = getattr(self, "rate_of_interest", 0)
+		tenure_months = getattr(self, "repayment_periods", 0)
+		
+		# Get repayment start date
+		if hasattr(self, 'loan_disbursement') and self.loan_disbursement:
+			repayment_start_date = self._get_first_disbursement_date()
+			print(f"Repayment start date from loan_disbursement: {repayment_start_date}")
+		else:
+			repayment_start_date = getattr(self, "repayment_start_date", None)
+			print(f"Repayment start date from self: {repayment_start_date}")
+			if isinstance(repayment_start_date, str):
+				try:
+					repayment_start_date = frappe.utils.getdate(repayment_start_date)
+				except (ValueError, AttributeError):
+					print("Error getting date from string")
+					repayment_start_date = frappe.utils.nowdate()
+			elif repayment_start_date is None:
+				repayment_start_date = frappe.utils.nowdate()
+				
+
+		# Only calculate if we have valid values
+		if principal > 0 and tenure_months > 0:
+			try:
+				# Get special EMI configuration from loan document
+				loan_doc = frappe.get_doc("Loan", self.loan)
+				enable_special_emi = loan_doc.get("enable_special_emi", False)
+				special_emi_amount = loan_doc.get("special_emi_amount", 0)
+				special_emi_period = loan_doc.get("special_emi_period", 0)
+				
+				# Apply special EMI if enabled and valid
+				special_emi = None
+				if enable_special_emi and special_emi_amount > 0 and special_emi_period > 0:
+					# Create special EMI dictionary for the specified period
+					special_emi_dict = {}
+					for month in range(1, special_emi_period + 1):
+						special_emi_dict[month] = special_emi_amount
+					special_emi = special_emi_dict
+
+				# Generate schedule using the new engine
+				schedule_data = self._generate_repayment_schedule_engine(
+					principal=principal,
+					annual_interest_rate=annual_interest_rate,
+					tenure_months=tenure_months,
+					special_emi=special_emi,
+					repayment_start_date=repayment_start_date,
+					special_emi_period=special_emi_period
+				)
+
+				# Populate repayment schedule child table
+				for i, row in enumerate(schedule_data["customer_schedule"], 1):
+					self.append("repayment_schedule", {
+						"idx": i,
+						"payment_date": row["payment_date"],
+						"number_of_days": 30,  # Approximate days per month
+						"principal_amount": row["principal"],
+						"interest_amount": row["interest"],
+						"total_payment": row["emi"],
+						"balance_loan_amount": row["balance"],
+						"demand_generated": 0
+					})
+
+				# Set other fields
+				self.maturity_date = schedule_data["maturity_date"]
+				self.number_of_rows = schedule_data["number_of_rows"]
+				self.monthly_repayment_amount = schedule_data["standard_emi"]
+
+			except Exception as e:
+				frappe.log_error(f"Error generating repayment schedule: {str(e)}", "Loan Repayment Schedule Error")
+				# Set empty schedules on error
+				self.repayment_schedule = []
+				self.maturity_date = None
+				self.number_of_rows = 0
+				self.monthly_repayment_amount = 0
+		else:
+			# Set empty schedules for invalid values
+			self.repayment_schedule = []
+			self.maturity_date = None
+			self.number_of_rows = 0
+			self.monthly_repayment_amount = 0
+
+	def _handle_subsequent_disbursement(self):
+		"""Handle subsequent disbursements by copying past schedules and recalculating from new disbursement date."""
+		try:
+			# Get current disbursement details
+			current_disbursement = frappe.get_doc("Loan Disbursement", self.loan_disbursement)
+			current_disbursement_date = current_disbursement.disbursement_date
+			current_disbursement_amount = current_disbursement.disbursed_amount
+			
+			# Get the most recent active repayment schedule
+			prev_schedule = self._get_most_recent_active_schedule()
+			if not prev_schedule:
+				# Fallback to first disbursement logic if no previous schedule found
+				self._handle_first_disbursement()
+				return
+			
+			# Copy past schedule rows up to the new disbursement date
+			self._copy_past_schedule_rows(prev_schedule, current_disbursement_date)
+			
+			# Calculate remaining tenure and outstanding balance
+			remaining_tenure, outstanding_balance = self._calculate_remaining_tenure_and_balance(
+				prev_schedule, current_disbursement_date, current_disbursement_amount
 			)
+			
+			# Generate new schedule for remaining period
+			if remaining_tenure > 0 and outstanding_balance > 0:
+				self._generate_remaining_schedule(
+					outstanding_balance, remaining_tenure, current_disbursement_date
+				)
+			
+			# Update maturity date and other fields
+			if self.repayment_schedule:
+				self.maturity_date = self.repayment_schedule[-1].payment_date
+				self.number_of_rows = len(self.repayment_schedule)
+			
+		except Exception as e:
+			frappe.log_error(f"Error handling subsequent disbursement: {str(e)}", "Loan Repayment Schedule Error")
+			# Fallback to first disbursement logic
+			self._handle_first_disbursement()
+
+	def _get_most_recent_active_schedule(self):
+		"""Get the most recent active repayment schedule for this loan."""
+		try:
+			print(f"Looking for most recent active schedule for loan: {self.loan}")
+			
+			# Get the most recent active schedule
+			prev_schedule_name = frappe.db.get_value(
+				"Loan Repayment Schedule",
+				{
+					"loan": self.loan,
+					"docstatus": 1,  # Only submitted schedules
+					"status": "Active"
+				},
+				"name",
+				order_by="creation desc"
+			)
+			
+			print(f"Found previous schedule name: {prev_schedule_name}")
+			
+			if prev_schedule_name:
+				prev_schedule = frappe.get_doc("Loan Repayment Schedule", prev_schedule_name)
+				print(f"Previous schedule has {len(prev_schedule.repayment_schedule)} rows")
+				return prev_schedule
+			else:
+				print("No previous active schedule found")
+				return None
+			
+		except Exception as e:
+			print(f"Error getting most recent schedule: {str(e)}")
+			return None
+
+	def _copy_past_schedule_rows(self, prev_schedule, new_disbursement_date):
+		"""Copy past schedule rows up to the new disbursement date."""
+		try:
+			copied_rows = 0
+			print(f"Copying rows from previous schedule. New disbursement date: {new_disbursement_date}")
+			print(f"Previous schedule has {len(prev_schedule.repayment_schedule)} rows")
+			
+			for row in prev_schedule.repayment_schedule:
+				print(f"Checking row {row.idx}: payment_date={row.payment_date}, balance={row.balance_loan_amount}")
+				
+				# Copy rows that have payment dates before or equal to the new disbursement date
+				if getdate(row.payment_date) <= getdate(new_disbursement_date):
+					self.append("repayment_schedule", {
+						"idx": row.idx,
+						"payment_date": row.payment_date,
+						"number_of_days": row.number_of_days,
+						"principal_amount": row.principal_amount,
+						"interest_amount": row.interest_amount,
+						"total_payment": row.total_payment,
+						"balance_loan_amount": row.balance_loan_amount,
+						"demand_generated": row.demand_generated
+					})
+					copied_rows += 1
+					print(f"Copied row {row.idx}: balance={row.balance_loan_amount}")
+				else:
+					# Stop copying once we reach a payment date after the new disbursement
+					print(f"Stopping at row {row.idx}: payment_date={row.payment_date} is after disbursement date")
+					break
+			
+			print(f"Copied {copied_rows} rows from previous schedule up to {new_disbursement_date}")
+			
+		except Exception as e:
+			print(f"Error copying past schedule rows: {str(e)}")
+
+	def _calculate_remaining_tenure_and_balance(self, prev_schedule, new_disbursement_date, new_disbursement_amount):
+		"""Calculate remaining tenure and outstanding balance after copying past rows."""
+		try:
+			# Get the original loan details
+			loan_doc = frappe.get_doc("Loan", self.loan)
+			original_tenure = loan_doc.repayment_periods
+			original_start_date = loan_doc.repayment_start_date
+			
+			# Calculate how many months have passed since the original start date
+			# More accurate calculation considering the actual payment dates
+			months_passed = 0
+			if self.repayment_schedule:
+				# Count the number of rows we copied (these represent months that have passed)
+				months_passed = len(self.repayment_schedule)
+				print(f"Calculated months_passed from copied rows: {months_passed}")
+			else:
+				# Fallback calculation
+				months_passed = (new_disbursement_date.year - original_start_date.year) * 12 + \
+							   (new_disbursement_date.month - original_start_date.month)
+				print(f"Fallback months_passed calculation: {months_passed}")
+			
+			# Calculate remaining tenure - this should be the full remaining months from original tenure
+			remaining_tenure = original_tenure - months_passed
+			remaining_tenure = max(0, remaining_tenure)  # Ensure non-negative
+			
+			# Calculate outstanding balance from the last copied row
+			outstanding_balance = 0
+			if self.repayment_schedule:
+				# Use the balance from the last copied row (this is the remaining balance from previous disbursements)
+				last_copied_row = self.repayment_schedule[-1]
+				outstanding_balance = last_copied_row.balance_loan_amount
+				print(f"Using balance from last copied row: {outstanding_balance}")
+			else:
+				# Fallback: calculate from previous disbursements
+				outstanding_balance = self._get_total_disbursed_amount_before_date(new_disbursement_date)
+				print(f"Using fallback balance calculation: {outstanding_balance}")
+			
+			# Add the new disbursement amount
+			outstanding_balance += new_disbursement_amount
+			
+			print(f"Original tenure: {original_tenure}, months passed: {months_passed}, remaining tenure: {remaining_tenure}, outstanding balance: {outstanding_balance}")
+			
+			return remaining_tenure, outstanding_balance
+			
+		except Exception as e:
+			print(f"Error calculating remaining tenure and balance: {str(e)}")
+			return 0, 0
+
+	def _get_total_disbursed_amount_before_date(self, target_date):
+		"""Get total disbursed amount before a specific date."""
+		try:
+			disbursements = frappe.get_all(
+				"Loan Disbursement",
+				filters={
+					"against_loan": self.loan,
+					"docstatus": 1,  # Only submitted disbursements
+					"disbursement_date": ["<", target_date]
+				},
+				fields=["disbursed_amount"]
+			)
+			
+			total_disbursed = sum(d["disbursed_amount"] for d in disbursements)
+			return total_disbursed
+			
+		except Exception as e:
+			print(f"Error getting total disbursed amount: {str(e)}")
+			return 0
+
+	def _generate_remaining_schedule(self, outstanding_balance, remaining_tenure, start_date):
+		"""Generate repayment schedule for the remaining period after new disbursement."""
+		try:
+			annual_interest_rate = getattr(self, "rate_of_interest", 0)
+			monthly_rate = annual_interest_rate / 1200  # Convert to monthly decimal
+			
+			# Get special EMI configuration from loan document
+			loan_doc = frappe.get_doc("Loan", self.loan)
+			enable_special_emi = loan_doc.get("enable_special_emi", False)
+			special_emi_amount = loan_doc.get("special_emi_amount", 0)
+			special_emi_period = loan_doc.get("special_emi_period", 0)
+			
+			# Calculate how many months have already passed (including special EMI period)
+			original_start_date = loan_doc.repayment_start_date
+			# Use the same logic as tenure calculation - count copied rows
+			months_passed = len(self.repayment_schedule)
+			
+			print(f"Original start date: {original_start_date}, new disbursement date: {start_date}, months_passed: {months_passed}")
+			
+			# Determine if we're still in special EMI period
+			in_special_emi_period = False
+			if enable_special_emi and special_emi_period > 0:
+				# Check if the current month is within the special EMI period
+				if months_passed < special_emi_period:
+					in_special_emi_period = True
+					# Calculate how many special EMI months are remaining
+					special_emi_months_remaining = special_emi_period - months_passed
+				else:
+					special_emi_months_remaining = 0
+			else:
+				special_emi_months_remaining = 0
+			
+			print(f"Months passed: {months_passed}, special_emi_period: {special_emi_period}, special_emi_months_remaining: {special_emi_months_remaining}")
+			
+			# Calculate EMI for the remaining tenure
+			if in_special_emi_period and special_emi_months_remaining > 0:
+				# Use special EMI for the remaining special EMI months
+				special_emi = special_emi_amount
+				# After special EMI period, calculate EMI for the remaining months
+				regular_tenure_after_special = remaining_tenure - special_emi_months_remaining
+				if regular_tenure_after_special > 0:
+					# Calculate the balance that will remain after special EMI period
+					balance_after_special_emi = outstanding_balance
+					for month in range(1, special_emi_months_remaining + 1):
+						interest = balance_after_special_emi * monthly_rate
+						if special_emi > interest:
+							principal = special_emi - interest
+							balance_after_special_emi = balance_after_special_emi - principal
+						else:
+							balance_after_special_emi = balance_after_special_emi + (interest - special_emi)
+					
+					# Calculate EMI for the period after special EMI
+					if monthly_rate == 0:
+						regular_emi = round(balance_after_special_emi / regular_tenure_after_special, 2)
+					else:
+						factor = (1 + monthly_rate) ** regular_tenure_after_special
+						regular_emi = round(balance_after_special_emi * monthly_rate * factor / (factor - 1), 2)
+				else:
+					regular_emi = special_emi
+			else:
+				# No special EMI period remaining, use standard calculation for full remaining tenure
+				if monthly_rate == 0:
+					regular_emi = round(outstanding_balance / remaining_tenure, 2)
+				else:
+					factor = (1 + monthly_rate) ** remaining_tenure
+					regular_emi = round(outstanding_balance * monthly_rate * factor / (factor - 1), 2)
+				special_emi = regular_emi
+				special_emi_months_remaining = 0
+			
+			print(f"EMI calculation - outstanding_balance: {outstanding_balance}, remaining_tenure: {remaining_tenure}, monthly_rate: {monthly_rate}, special_emi: {special_emi}, regular_emi: {regular_emi}, special_emi_months_remaining: {special_emi_months_remaining}")
+			
+			# Generate schedule for the full remaining tenure
+			running_balance = outstanding_balance
+			start_idx = len(self.repayment_schedule) + 1
+			
+			print(f"Starting to generate {remaining_tenure} rows with running_balance: {running_balance}")
+			
+			for month in range(1, remaining_tenure+1):
+				# Calculate payment date based on original loan start date and the month number from original schedule
+				# The month number should be months_passed + month (to continue from where we left off)
+				original_month_number = months_passed + month
+				payment_date = self._calculate_payment_date_with_offset(original_start_date, original_month_number)
+				print(f"Payment date calculation: original_month_number={original_month_number}, payment_date={payment_date}")
+				
+				# Calculate interest and principal
+				interest = round(running_balance * monthly_rate, 2)
+				
+				# Determine EMI for this month
+				if month <= special_emi_months_remaining:
+					# Use special EMI for this month
+					emi = special_emi
+				else:
+					# Use regular EMI for this month
+					emi = regular_emi
+				
+				if month == remaining_tenure:
+					# Final payment: clear the remaining balance
+					principal = round(running_balance, 2)
+					emi = round(principal + interest, 2)
+					running_balance = 0.0
+				else:
+					# Regular payment
+					if emi <= interest:
+						principal = 0.0
+						running_balance = round(running_balance + (interest - emi), 2)
+					else:
+						principal = round(min(emi - interest, running_balance), 2)
+						running_balance = round(running_balance - principal, 2)
+						emi = round(principal + interest, 2)
+				
+				print(f"Month {month}: payment_date={payment_date}, emi={emi}, principal={principal}, interest={interest}, running_balance={running_balance}")
+				
+				# Add the row
+				self.append("repayment_schedule", {
+					"idx": start_idx + month - 1,
+					"payment_date": payment_date,
+					"number_of_days": 30,  # Approximate days per month
+					"principal_amount": principal,
+					"interest_amount": interest,
+					"total_payment": emi,
+					"balance_loan_amount": max(running_balance, 0.0),
+					"demand_generated": 0
+				})
+			
+			print(f"Generated {remaining_tenure} new rows for remaining schedule (special EMI months: {special_emi_months_remaining})")
+			print(f"Final running_balance: {running_balance}")
+			
+		except Exception as e:
+			print(f"Error generating remaining schedule: {str(e)}")
+
+	def _generate_repayment_schedule_engine(self, principal, annual_interest_rate, tenure_months, special_emi, repayment_start_date, special_emi_period):
+		"""Internal engine for generating repayment schedule with support for multiple disbursements."""
+		from datetime import date, timedelta
+		
+		# Initialize variables
+		monthly_rate = annual_interest_rate / 1200  # Convert annual rate to monthly
+		standard_emi = self._calculate_standard_emi(principal, monthly_rate, tenure_months)
+		schedule = []
+		running_balance = 0.0
+		
+		# Get disbursement details for multiple disbursements
+		disbursements = self._get_disbursement_details()
+		if not disbursements:
+			# Fallback: treat the whole principal as a single disbursement
+			disbursements = [{"disbursed_amount": principal, "disbursement_date": repayment_start_date}]
+
+		# Prepare disbursement tracking
+		disb_ptr = 0
+		total_disbursed = 0.0
+		current_emi = standard_emi
+
+		# Precompute payment dates
+		payment_dates = [self._calculate_payment_date_with_offset(repayment_start_date, m) for m in range(1, tenure_months + 1)]
+
+		# Generate schedule for each month
+		for month in range(1, tenure_months + 1):
+			payment_date = payment_dates[month - 1]
+
+			# Add any new disbursements that occur on or before this payment date
+			new_disb = False
+			while disb_ptr < len(disbursements) and disbursements[disb_ptr]["disbursement_date"] <= payment_date:
+				amt = float(disbursements[disb_ptr]["disbursed_amount"])
+				total_disbursed += amt
+				running_balance += amt
+				new_disb = True
+				disb_ptr += 1
+
+			# Calculate remaining months for EMI calculation
+			if hasattr(self, '_remaining_tenure_for_emi'):
+				months_left_for_emi = self._remaining_tenure_for_emi - month + 1
+			else:
+				months_left_for_emi = tenure_months - month + 1
+
+			# Recalculate EMI if this is the first month or there's a new disbursement
+			if new_disb or (month == 1):
+				if running_balance > 0 and months_left_for_emi > 0:
+					# Check if special EMI applies for this month
+					special_emi_for_month = self._get_special_emi_for_month(month, special_emi)
+					
+					if special_emi_for_month is not None:
+						current_emi = special_emi_for_month
+					else:
+						# Use standard EMI calculation
+						if monthly_rate == 0:
+							current_emi = round(running_balance / months_left_for_emi, 2)
+						else:
+							factor = (1 + monthly_rate) ** months_left_for_emi
+							current_emi = round(running_balance * monthly_rate * factor / (factor - 1), 2)
+
+			# Calculate interest and principal for this month
+			interest = round(running_balance * monthly_rate, 2)
+			
+			# Check if special EMI applies for this month
+			special_emi_for_month = self._get_special_emi_for_month(month, special_emi)
+			if special_emi_for_month is not None:
+				emi = special_emi_for_month
+			else:
+				# Use current EMI or recalculate if needed
+				should_recalculate = (new_disb or (month == 1) or 
+									(special_emi and isinstance(special_emi, dict) and 
+									 month > max(special_emi.keys()) if special_emi else 0))
+				
+				if should_recalculate:
+					if monthly_rate == 0:
+						emi = round(running_balance / (tenure_months - month + 1), 2)
+					else:
+						remaining_months = tenure_months - month + 1
+						factor = (1 + monthly_rate) ** remaining_months
+						emi = round(running_balance * monthly_rate * factor / (factor - 1), 2)
+					current_emi = emi
+				else:
+					emi = current_emi
+
+			# Ensure EMI doesn't exceed the remaining balance + interest
+			max_payment = running_balance + interest
+			if emi > max_payment:
+				emi = max_payment
+
+			# Calculate principal component
+			if running_balance <= 0:
+				principal_component = 0.0
+				emi = 0.0
+				interest = 0.0
+			elif month == tenure_months:
+				# Final payment: clear the remaining balance
+				principal_component = round(running_balance, 2)
+				emi = round(principal_component + interest, 2)
+				running_balance = 0.0
+			else:
+				# Regular payment
+				if emi <= interest:
+					principal_component = 0.0
+					running_balance = round(running_balance + (interest - emi), 2)
+				else:
+					principal_component = round(min(emi - interest, running_balance), 2)
+					running_balance = round(running_balance - principal_component, 2)
+
+			schedule.append({
+				"month": month,
+				"payment_date": payment_date,
+				"emi": round(emi, 2),
+				"interest": interest,
+				"principal": principal_component,
+				"balance": max(running_balance, 0.0),
+			})
+
+		# Calculate maturity date
+		maturity_date = schedule[-1]["payment_date"] if schedule else repayment_start_date
+
+		return {
+			"customer_schedule": schedule,
+			"co_lender_schedule": schedule,  # Same as customer for now
+			"maturity_date": maturity_date,
+			"number_of_rows": len(schedule),
+			"standard_emi": standard_emi,
+		}
+
+	def _calculate_standard_emi(self, principal, monthly_rate, tenure_months):
+		"""Calculate standard EMI using the formula: EMI = P * r * (1 + r)^n / ((1 + r)^n - 1)"""
+		if monthly_rate == 0:
+			# Zero interest rate - equal principal payments
+			return round(principal / tenure_months, 2)
+		
+		# Standard EMI formula for compound interest
+		factor = (1 + monthly_rate) ** tenure_months
+		emi = principal * monthly_rate * factor / (factor - 1)
+		return round(emi, 2)
+
+	def _calculate_payment_date_with_offset(self, start_date, month):
+		"""Calculate the payment date for a given month."""
+		from frappe.utils import add_months
+		
+		# Calculate payment date by adding months
+		payment_date = add_months(start_date, month - 1)  # month - 1 because first payment is on start date
+		return payment_date
+	
+	def _calculate_payment_date(self, start_date, month): #without offset
+		"""Calculate the payment date for a given month."""
+		from frappe.utils import add_months
+		
+		# Calculate payment date by adding months
+		payment_date = add_months(start_date, month)  # month - 1 because first payment is on start date
+		return payment_date
+
+	def _get_special_emi_for_month(self, month, special_emi):
+		"""Get special EMI amount for a specific month if configured."""
+		if special_emi is None:
+			return None
+		
+		if isinstance(special_emi, (int, float)):
+			# Constant special EMI - return the same value for all months
+			return float(special_emi)
+		elif isinstance(special_emi, dict):
+			# Month-specific special EMI - only return if month exists in dict
+			return special_emi.get(month)
+		
+		return None
+
+	def _get_effective_principal_for_new_disbursement(self):
+		"""Get the effective principal amount for a new disbursement considering outstanding balance."""
+		try:
+			# If this is the first disbursement, use the disbursed amount
+			if not hasattr(self, 'loan_disbursement') or not self.loan_disbursement:
+				return self._get_total_disbursed_amount()
+			
+			# Get the current disbursement details
+			current_disbursement = frappe.get_doc("Loan Disbursement", self.loan_disbursement)
+			current_disbursement_date = current_disbursement.disbursement_date
+			current_disbursement_amount = current_disbursement.disbursed_amount
+			
+			# Get all disbursements up to the current disbursement date (EXCLUDING the current one)
+			disbursements = frappe.get_all(
+				"Loan Disbursement",
+				filters={
+					"against_loan": self.loan,
+					"docstatus": 1,  # Only submitted disbursements
+					"disbursement_date": ["<", current_disbursement_date]  # Strictly less than, not <=
+				},
+				fields=["disbursed_amount", "disbursement_date"],
+				order_by="disbursement_date"
+			)
+			
+			# Calculate total disbursed amount from previous disbursements
+			previous_disbursements_total = sum(d["disbursed_amount"] for d in disbursements)
+			
+			if previous_disbursements_total == 0:
+				# This is the first disbursement - use only the current disbursement amount
+				effective_principal = current_disbursement_amount
+			else:
+				# This is a subsequent disbursement - we need to recalculate the entire schedule
+				# based on the total outstanding amount and remaining tenure
+				total_outstanding = previous_disbursements_total + current_disbursement_amount
+				effective_principal = total_outstanding
+				
+				# Calculate remaining tenure from the disbursement date (for EMI calculation only)
+				original_loan = frappe.get_doc("Loan", self.loan)
+				original_start_date = original_loan.repayment_start_date
+				original_tenure = original_loan.repayment_periods
+				
+				# Calculate how many months have passed since the original start date
+				months_passed = (current_disbursement_date.year - original_start_date.year) * 12 + (current_disbursement_date.month - original_start_date.month)
+				remaining_tenure = original_tenure - months_passed
+				
+				# Store the remaining tenure for EMI calculation, but don't overwrite the original tenure
+				self._remaining_tenure_for_emi = remaining_tenure
+				
+				# For subsequent disbursements, we need to adjust the repayment start date
+				# to start from the current disbursement date, not the original loan start date
+				if hasattr(self, 'repayment_start_date'):
+					self.repayment_start_date = current_disbursement_date
+			
+			return effective_principal
+			
+		except Exception as e:
+			frappe.log_error(f"Error calculating effective principal: {str(e)}", "Loan Repayment Schedule Error")
+			return self._get_total_disbursed_amount()
+
+	def _get_total_disbursed_amount(self):
+		"""Get the total disbursed amount for the loan (cumulative for multiple disbursements)."""
+		try:
+			# If we have a specific loan_disbursement, use that amount for the first disbursement
+			if hasattr(self, 'loan_disbursement') and self.loan_disbursement:
+				current_disbursement = frappe.get_doc("Loan Disbursement", self.loan_disbursement)
+				
+				# Check if this is the first disbursement
+				previous_disbursements = frappe.get_all(
+					"Loan Disbursement",
+					filters={
+						"against_loan": self.loan,
+						"docstatus": 1,  # Only submitted disbursements
+						"disbursement_date": ["<", current_disbursement.disbursement_date]
+					},
+					fields=["name"],
+					limit=1
+				)
+				
+				if not previous_disbursements:
+					# This is the first disbursement - use only the current disbursement amount
+					return current_disbursement.disbursed_amount
+			
+			# Get disbursements for this loan - only submitted ones, plus the current disbursement if it's draft
+			disbursements = frappe.get_all(
+				"Loan Disbursement",
+				filters={
+					"against_loan": self.loan,
+					"docstatus": 1,  # Only submitted disbursements
+				},
+				fields=["disbursed_amount", "disbursement_date", "status", "docstatus", "name"],
+				order_by="disbursement_date"
+			)
+			
+			# If we have a specific loan_disbursement and it's not in the submitted list, add it
+			if hasattr(self, 'loan_disbursement') and self.loan_disbursement:
+				current_disbursement = frappe.get_doc("Loan Disbursement", self.loan_disbursement)
+				if current_disbursement.docstatus == 0:  # If current disbursement is draft
+					disbursements.append({
+						"disbursed_amount": current_disbursement.disbursed_amount,
+						"disbursement_date": current_disbursement.disbursement_date,
+						"status": current_disbursement.status,
+						"docstatus": current_disbursement.docstatus,
+						"name": current_disbursement.name
+					})
+			
+			if not disbursements:
+				# Fallback to loan_amount if no disbursements found
+				return getattr(self, "loan_amount", 0)
+			
+			# Calculate total disbursed amount
+			total_disbursed = sum(d["disbursed_amount"] for d in disbursements)
+			return total_disbursed
+			
+		except Exception as e:
+			frappe.log_error(f"Error getting disbursed amount: {str(e)}", "Loan Repayment Schedule Error")
+			# Fallback to loan_amount
+			return getattr(self, "loan_amount", 0)
+
+	def _get_first_disbursement_date(self):
+		"""Get the date of the first disbursement for this loan."""
+		try:
+			# Get all disbursements for this loan (submitted and current draft)
+			disbursements = frappe.get_all(
+				"Loan Disbursement",
+				filters={
+					"against_loan": self.loan,
+					"docstatus": 1,  # Only submitted disbursements
+				},
+				fields=["disbursed_amount", "disbursement_date"],
+				order_by="disbursement_date"
+			)
+			
+			# If we have a specific loan_disbursement and it's not in the submitted list, add it
+			if hasattr(self, 'loan_disbursement') and self.loan_disbursement:
+				current_disbursement = frappe.get_doc("Loan Disbursement", self.loan_disbursement)
+				if current_disbursement.docstatus == 0:  # If current disbursement is draft
+					disbursements.append({
+						"disbursed_amount": current_disbursement.disbursed_amount,
+						"disbursement_date": current_disbursement.disbursement_date
+					})
+			
+			if not disbursements:
+				# Fallback to current date if no disbursements found
+				return frappe.utils.nowdate()
+			
+			# Get the earliest disbursement date
+			first_disbursement_date = min(d["disbursement_date"] for d in disbursements)
+			return first_disbursement_date
+			
+		except Exception as e:
+			frappe.log_error(f"Error getting first disbursement date: {str(e)}", "Loan Repayment Schedule Error")
+			return frappe.utils.nowdate()
+
+	def _get_disbursement_details(self):
+		"""Get detailed disbursement information for interest calculations."""
+		try:
+			# If we have a specific loan_disbursement, get disbursements up to that date
+			if hasattr(self, 'loan_disbursement') and self.loan_disbursement:
+				current_disbursement = frappe.get_doc("Loan Disbursement", self.loan_disbursement)
+				current_disbursement_date = current_disbursement.disbursement_date
+				
+				# Get all disbursements up to the current disbursement date (EXCLUDING the current one)
+				disbursements = frappe.get_all(
+					"Loan Disbursement",
+					filters={
+						"against_loan": self.loan,
+						"docstatus": 1,  # Only submitted disbursements
+						"disbursement_date": ["<", current_disbursement_date]  # Strictly less than, not <=
+					},
+					fields=["disbursed_amount", "disbursement_date"],
+					order_by="disbursement_date"
+				)
+				
+				# Add the current disbursement to the list for interest calculations
+				disbursements.append({
+					"disbursed_amount": current_disbursement.disbursed_amount,
+					"disbursement_date": current_disbursement_date
+				})
+				
+				return disbursements
+			else:
+				# Fallback: Get all disbursements for this loan
+				disbursements = frappe.get_all(
+					"Loan Disbursement",
+					filters={
+						"against_loan": self.loan,
+						"docstatus": 1,  # Only submitted disbursements
+					},
+					fields=["disbursed_amount", "disbursement_date"],
+					order_by="disbursement_date"
+				)
+				return disbursements
+			
+		except Exception as e:
+			frappe.log_error(f"Error getting disbursement details: {str(e)}", "Loan Repayment Schedule Error")
+			return []
 
 	def make_co_lender_schedule(self):
 		if not self.loan_partner:
@@ -425,14 +1205,14 @@ class LoanRepaymentSchedule(Document):
 			if special_emi_enabled and self.repayment_frequency == "Monthly":
 				if getdate(payment_date) > getdate(special_emi_end_date) and not remaining_amount:
 					remaining_amount = balance_amount
-					frappe.logger().error(f"special_emi. remaining amount: {remaining_amount}")
+					print(f"special_emi. remaining amount: {remaining_amount}")
 					monthly_repayment_amount = get_monthly_repayment_amount(
 						remaining_amount, rate_of_interest, remaining_repayment_period, self.repayment_frequency
 					)
 
-				# frappe.logger().error(f"rrp: {remaining_repayment_period}, monthly emi: {monthly_repayment_amount}")
+				# print(f"rrp: {remaining_repayment_period}, monthly emi: {monthly_repayment_amount}")
 
-			# frappe.logger().error(f"tenure: {tenure}, rrp: {remaining_repayment_period}, nor: {self.number_of_rows}, rp: {self.repayment_periods}")
+			# print(f"tenure: {tenure}, rrp: {remaining_repayment_period}, nor: {self.number_of_rows}, rp: {self.repayment_periods}")
 			prev_balance_amount = balance_amount
 
 			payment_days, months = self.get_days_and_months(

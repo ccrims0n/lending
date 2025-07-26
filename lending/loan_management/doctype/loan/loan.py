@@ -165,7 +165,7 @@ class Loan(AccountsController):
 			frappe.throw(_("Please enter Special EMI Amount"))
 
 		if self.repayment_method == "Repay Over Number of Periods":
-			if self.special_emi_period >= self.repayment_periods:
+			if self.repayment_periods and self.special_emi_period >= self.repayment_periods:
 				frappe.throw(_("Special EMI Period cannot be greater than or equal to total Repayment Periods"))
 
 	def validate_accounts(self):
